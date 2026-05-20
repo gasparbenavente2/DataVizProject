@@ -9,7 +9,7 @@
 [Milestone 1](#milestone-1) • [Milestone 2](<Milestones/Milestone 2 - Perspectiva.pdf>) • [Milestone 3](#milestone-3)
 
 ## Current Working Demo:
-https://com-480-data-visualization.github.io/perspectiva/
+https://data-viz-project-lovat.vercel.app
 
 ## Milestone 1 (20th March, 5pm)
 
