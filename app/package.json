@@ -8,10 +8,8 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "optionalDependencies": {
-    "duckdb": "^1.1.3"
-  },
   "dependencies": {
+    "hyparquet": "^1.13.0",
     "maplibre-gl": "^4.7.1",
     "next": "^15.3.0",
     "react": "^19.0.0",

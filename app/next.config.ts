@@ -5,8 +5,6 @@ import type { NextConfig } from "next";
 const isStaticExport = process.env.STATIC_EXPORT === 'true';
 
 const nextConfig: NextConfig = {
-  // duckdb is a native module — must not be bundled, loaded at runtime instead.
-  serverExternalPackages: ['duckdb'],
   eslint: { ignoreDuringBuilds: true },
   ...(isStaticExport && {
     output: 'export',

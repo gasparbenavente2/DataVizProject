@@ -1,43 +1,75 @@
-import path from 'path';
-import { query } from './db';
-import type { SentimentRow } from '@/types';
+import path from 'path'
+import { readFileSync } from 'fs'
+import { parquetRead, parquetMetadata } from 'hyparquet'
+import type { SentimentRow } from '@/types'
 
-// Build absolute path to a parquet file in public/data/.
-// Escape single quotes so the path is safe inside a SQL string literal.
-function parquetPath(file: string): string {
-  const abs = path.join(process.cwd(), 'public', 'data', `${file}.parquet`);
-  return abs.replace(/'/g, "''");
+interface ParsedFile {
+  dates: string[]
+  byDate: Map<string, SentimentRow[]>
 }
 
-/**
- * All countries' sentiment for a given date.
- * Returns an empty array if the date is not present in the file.
- */
-export async function getSentimentByDate(
-  date: string,
-  file: string
-): Promise<SentimentRow[]> {
-  const p = parquetPath(file);
-  return query<SentimentRow>(`
-    SELECT
-      country_iso3,
-      avg_tone,
-      CAST(article_count AS INTEGER) AS article_count
-    FROM read_parquet('${p}')
-    WHERE date = '${date}'::DATE
-    ORDER BY country_iso3
-  `);
+// In-process cache — parquet is parsed once per file per server lifetime
+const cache = new Map<string, ParsedFile>()
+
+function toArrayBuffer(buf: Buffer): ArrayBuffer {
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
 }
 
-/**
- * Sorted list of all distinct dates in the parquet file, as "YYYY-MM-DD" strings.
- */
+function toAsyncBuffer(ab: ArrayBuffer) {
+  return {
+    byteLength: ab.byteLength,
+    slice: (start: number, end: number) => Promise.resolve(ab.slice(start, end)),
+  }
+}
+
+function formatDate(d: unknown): string {
+  if (d instanceof Date) return d.toISOString().slice(0, 10)
+  // date32: integer days since Unix epoch
+  if (typeof d === 'number') return new Date(d * 86400000).toISOString().slice(0, 10)
+  return String(d).slice(0, 10)
+}
+
+async function loadFile(file: string): Promise<ParsedFile> {
+  if (cache.has(file)) return cache.get(file)!
+
+  const filePath = path.join(process.cwd(), 'public', 'data', `${file}.parquet`)
+  const ab = toArrayBuffer(readFileSync(filePath))
+  const asyncBuffer = toAsyncBuffer(ab)
+
+  // Column names come from schema (index 0 is the root element, skip it)
+  const meta = parquetMetadata(ab)
+  const columns = meta.schema.slice(1).map((s) => s.name)
+
+  const byDate = new Map<string, SentimentRow[]>()
+
+  await parquetRead({
+    file: asyncBuffer,
+    onComplete: (rows: unknown[][]) => {
+      for (const row of rows) {
+        const obj = Object.fromEntries(columns.map((name, i) => [name, row[i]]))
+        const dateStr = formatDate(obj.date)
+        if (!byDate.has(dateStr)) byDate.set(dateStr, [])
+        byDate.get(dateStr)!.push({
+          country_iso3: String(obj.country_iso3),
+          avg_tone: obj.avg_tone == null ? null : Number(obj.avg_tone),
+          article_count: Number(obj.article_count),
+        })
+      }
+    },
+  })
+
+  const dates = [...byDate.keys()].sort()
+  const result: ParsedFile = { dates, byDate }
+  cache.set(file, result)
+  return result
+}
+
 export async function getAvailableDates(file: string): Promise<string[]> {
-  const p = parquetPath(file);
-  const rows = await query<{ date: string }>(`
-    SELECT DISTINCT CAST(date AS VARCHAR) AS date
-    FROM read_parquet('${p}')
-    ORDER BY date
-  `);
-  return rows.map((r) => r.date);
+  const { dates } = await loadFile(file)
+  return dates
+}
+
+export async function getSentimentByDate(date: string, file: string): Promise<SentimentRow[]> {
+  const { byDate } = await loadFile(file)
+  return byDate.get(date) ?? []
 }
