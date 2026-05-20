@@ -10,9 +10,10 @@ __pycache__/
 !app/package-lock.json
 !app/tsconfig.json
 !app/public/world-110m.geojson
-!app/public/data/*.json
 !vercel.json
 
-# Keep parquet out of git (too large / binary; copy manually)
+# Pipeline output parquets stay out of git (large/binary)
+# but app/public/data/ parquets are committed so teammates get the data
 *.parquet
+!app/public/data/*.parquet
 *.csv

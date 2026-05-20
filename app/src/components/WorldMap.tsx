@@ -78,6 +78,10 @@ function buildFillExpression(
         : amountColor(row.article_count, maxCount);
     pairs.push(row.country_iso3, color);
   }
+  // 'match' needs at least one input→output pair before the fallback
+  if (pairs.length === 0) {
+    return ['match', ['get', 'ADM0_A3'], 'XXX', '#ddd9d0', '#ddd9d0'] as unknown as ExpressionSpecification;
+  }
   return ['match', ['get', 'ADM0_A3'], ...pairs, '#ddd9d0'] as unknown as ExpressionSpecification;
 }
 

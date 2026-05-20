@@ -36,13 +36,16 @@ def fetch(
     end_int   = int(end.replace("-", "")   + "235959")
 
     # Each keyword must match (AND across keywords).
-    # Within a keyword, either the Themes field or the URL can match (OR).
+    # Within a keyword, Themes, V2Persons, or the URL can match (OR).
+    # Multi-word keywords use [- ] in URL regex to handle hyphenated slugs (e.g. elon-musk).
     per_kw = []
     for kw in keywords:
         kw = kw.lower().strip()
+        url_kw = kw.replace(" ", "[- ]")
         per_kw.append(
             f"(REGEXP_CONTAINS(LOWER(COALESCE(Themes, '')), r'\\b{kw}\\b')"
-            f" OR REGEXP_CONTAINS(LOWER(COALESCE(DocumentIdentifier, '')), r'{kw}'))"
+            f" OR REGEXP_CONTAINS(LOWER(COALESCE(V2Persons, '')), r'\\b{kw}\\b')"
+            f" OR REGEXP_CONTAINS(LOWER(COALESCE(DocumentIdentifier, '')), r'{url_kw}'))"
         )
     keyword_filter = "\n    AND ".join(per_kw)
 
@@ -85,6 +88,10 @@ def fetch(
     rows = client.query(sql).to_dataframe()
     df = pl.from_pandas(rows)
     print(f"  Fetched {len(df):,} rows.")
+
+    if len(df) == 0:
+        print("  WARNING: 0 rows returned — check your keywords. Not caching empty result.")
+        return df
 
     _CACHE_DIR.mkdir(parents=True, exist_ok=True)
     df.write_parquet(cache)

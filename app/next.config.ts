@@ -1,13 +1,19 @@
 import type { NextConfig } from "next";
 
+// Set STATIC_EXPORT=true only for GitHub Pages builds (see .github/workflows/deploy.yml).
+// Local dev runs as a normal Next.js server so API routes work.
+const isStaticExport = process.env.STATIC_EXPORT === 'true';
+
 const nextConfig: NextConfig = {
-  output: 'export',          // static HTML/JS — no Node server needed
-  basePath: '/perspectiva',  // GitHub Pages serves at /perspectiva
-  trailingSlash: true,       // required for GH Pages file routing
-  images: { unoptimized: true }, // next/image doesn't work in static export
-  env: {
-    NEXT_PUBLIC_BASE_PATH: '/perspectiva',
-  },
+  // duckdb is a native module — must not be bundled, loaded at runtime instead.
+  serverExternalPackages: ['duckdb'],
+  ...(isStaticExport && {
+    output: 'export',
+    basePath: '/perspectiva',
+    trailingSlash: true,
+    env: { NEXT_PUBLIC_BASE_PATH: '/perspectiva' },
+  }),
+  images: { unoptimized: true },
 };
 
 export default nextConfig;

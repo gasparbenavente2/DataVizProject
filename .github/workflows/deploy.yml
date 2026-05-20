@@ -32,6 +32,8 @@ jobs:
 
       - name: Build
         working-directory: app
+        env:
+          STATIC_EXPORT: 'true'
         run: npm run build
 
       - name: Upload Pages artifact
