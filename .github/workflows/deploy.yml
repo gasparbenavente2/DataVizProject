@@ -30,6 +30,9 @@ jobs:
         working-directory: app
         run: npm install --ignore-scripts
 
+      - name: Remove API routes (incompatible with static export)
+        run: rm -rf app/src/app/api
+
       - name: Build
         working-directory: app
         env:
