@@ -2,62 +2,74 @@
 
 import type { AnalysisMode } from './WorldMap';
 
-const MODES: { value: AnalysisMode; label: string }[] = [
-  { value: 'sentiment', label: 'sentiment' },
-  { value: 'amount', label: 'amount' },
-];
-
 interface HeaderProps {
   mode: AnalysisMode;
   onModeChange: (m: AnalysisMode) => void;
-  title: string;
+  dark: boolean;
+  onDarkToggle: () => void;
 }
 
-export default function Header({ mode, onModeChange, title }: HeaderProps) {
+export default function Header({ mode, onModeChange, dark, onDarkToggle }: HeaderProps) {
   return (
-    <header className="h-11 bg-white border-b border-stone-200 flex items-center px-5 shrink-0 gap-4">
-      {/* Logo — two overlapping circles (Perspectiva icon) */}
-      <span className="font-semibold text-sm tracking-tight text-stone-800 flex items-center gap-2">
-        <svg width="28" height="14" viewBox="0 0 28 14" fill="none">
-          <circle cx="7" cy="7" r="6" fill="none" stroke="#1c1917" strokeWidth="1.8" />
-          <circle cx="7" cy="7" r="6" fill="#1c1917" />
-          <circle cx="21" cy="7" r="6" fill="none" stroke="#1c1917" strokeWidth="1.8" />
-          <circle cx="21" cy="7" r="6" fill="#1c1917" />
+    <header
+      className="h-12 flex items-center px-5 shrink-0 gap-4 mode-transition z-20 relative"
+      style={{ background: 'var(--header-bg)', borderBottom: '1px solid var(--header-border)' }}
+    >
+      {/* Logo */}
+      <span className="font-semibold text-sm tracking-tight flex items-center gap-2 shrink-0" style={{ color: 'var(--tooltip-text)' }}>
+        <svg width="26" height="13" viewBox="0 0 26 13" fill="none">
+          <circle cx="6.5" cy="6.5" r="5.5" fill="currentColor" />
+          <circle cx="19.5" cy="6.5" r="5.5" fill="currentColor" />
         </svg>
         Perspectiva
       </span>
 
-      {/* Center: map title + analysis dropdown */}
-      <div className="flex-1 flex justify-center items-center gap-1.5 text-sm text-stone-700">
-        <span className="font-medium">{title} &amp;</span>
-        <div className="relative">
+      {/* Centre title + mode dropdown */}
+      <div className="flex-1 flex justify-center items-center gap-1.5 text-sm" style={{ color: 'var(--tooltip-text)' }}>
+        <span className="opacity-70">Spread of the news overtime &amp;</span>
+        <div className="relative flex items-center">
           <select
             value={mode}
-            onChange={(e) => onModeChange(e.target.value as AnalysisMode)}
-            className="appearance-none text-orange-600 font-semibold bg-transparent pr-4 cursor-pointer focus:outline-none"
+            onChange={e => onModeChange(e.target.value as AnalysisMode)}
+            className="appearance-none font-semibold bg-transparent pr-4 cursor-pointer focus:outline-none text-[#C97432]"
           >
-            {MODES.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
+            <option value="sentiment">sentiment</option>
+            <option value="amount">amount</option>
           </select>
-          <svg
-            className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-orange-600"
-            width="10"
-            height="6"
-            viewBox="0 0 10 6"
-            fill="currentColor"
-          >
-            <path d="M0 0l5 6 5-6z" />
+          <svg className="pointer-events-none absolute right-0 text-[#C97432]" width="9" height="5" viewBox="0 0 9 5" fill="currentColor">
+            <path d="M0 0l4.5 5L9 0z" />
           </svg>
         </div>
       </div>
 
-      {/* Right: About + flag */}
-      <div className="flex items-center gap-4 text-sm text-stone-600">
-        <button className="hover:text-stone-900 transition-colors">About</button>
-        <span title="English">🇬🇧</span>
+      {/* Right controls */}
+      <div className="flex items-center gap-3 shrink-0">
+        {/* Dark mode toggle */}
+        <button
+          onClick={onDarkToggle}
+          className="w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80"
+          style={{ background: dark ? '#1e293b' : '#f1f5f9', color: dark ? '#94a3b8' : '#64748b' }}
+          title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {dark ? (
+            // Sun icon
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="5"/>
+              <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+              <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+          ) : (
+            // Moon icon
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          )}
+        </button>
+
+        <span className="text-sm opacity-60 cursor-pointer hover:opacity-100 transition-opacity" style={{ color: 'var(--tooltip-text)' }}>About</span>
+        <span title="English" className="text-base">🇬🇧</span>
       </div>
     </header>
   );
