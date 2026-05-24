@@ -1,200 +1,202 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import WorldMap, { type AnalysisMode } from '@/components/WorldMap';
-import Timeline from '@/components/Timeline';
-import Sidebar from '@/components/Sidebar';
-import Header from '@/components/Header';
-import Legend from '@/components/Legend';
-import type { SentimentRow, DatesResponse, SentimentResponse } from '@/types';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import SectionLanding from '@/components/SectionLanding';
+import SectionMap from '@/components/SectionMap';
+import SectionEvents from '@/components/SectionEvents';
+import SectionSummary from '@/components/SectionSummary';
+import TimelineBar from '@/components/TimelineBar';
+import WorldMap from '@/components/WorldMap';
+import type { SentimentRow } from '@/types';
 
-// ─── Topics ──────────────────────────────────────────────────────────────────
-// To add a new topic: copy a parquet to app/public/data/, then add an entry here.
-// `file` = parquet filename without the .parquet extension.
+const TOPIC_FILE = 'elon-musk-2015-01-2026-05';
 
-interface TopicConfig {
-  file: string;
-  label: string;
-  events: Record<string, string>;
-}
-
-const TOPICS: TopicConfig[] = [
-  {
-    file: 'sputnik-vaccine-covid-2020-08-2021-08',
-    label: 'COVID Vaccines',
-    events: {
-      '2020-08-11': 'Russia registers Sputnik V',
-      '2020-11-11': 'Phase 3 results in The Lancet',
-      '2021-02-02': 'Lancet: 91.6% efficacy confirmed',
-      '2021-02-19': 'EU begins Sputnik evaluation',
-      '2021-03-05': 'Hungary: first EU country to vaccinate',
-      '2021-06-15': 'WHO emergency use listing review',
-      '2021-09-01': 'UN General Assembly — Russia pushes adoption',
-    },
-  },
-  {
-    file: 'ukraine-war-2022-02-2022-03',
-    label: 'Ukraine War',
-    events: {
-      '2022-02-24': 'Russia invades Ukraine',
-      '2022-03-01': 'Russia targets Kyiv',
-    },
-  },
-  {
-    file: 'elon-musk-2015-01-2026-05',
-    label: 'Elon Musk',
-    events: {
-      '2018-08-07': 'Take Tesla private tweet ($420)',
-      '2020-05-01': 'Defies COVID lockdown orders',
-      '2021-01-28': 'Dogecoin pump via tweets',
-      '2022-04-14': 'Offer to buy Twitter',
-      '2022-10-27': 'Twitter acquisition closes',
-      '2024-11-05': 'Trump election — political alignment',
-    },
-  },
-  {
-    file: 'brexit-2015-01-2026-05',
-    label: 'Brexit',
-    events: {
-      '2016-06-23': 'Brexit referendum — Leave wins',
-      '2017-03-29': 'Article 50 triggered',
-      '2019-01-15': 'Parliament rejects deal (432–202)',
-      '2019-07-24': 'Boris Johnson becomes PM',
-      '2020-01-31': 'UK formally leaves EU',
-      '2020-12-24': 'Trade deal agreed',
-    },
-  },
+const EVENTS = [
+  { id: 0, label: 'EVENT1' },
+  { id: 1, label: 'EVENT2' },
+  { id: 2, label: 'EVENT3' },
+  { id: 3, label: 'EVENT4' },
+  { id: 4, label: 'EVENT5' },
 ];
 
-// ─── App ─────────────────────────────────────────────────────────────────────
+function getEventIndices(total: number): number[] {
+  return [0, 0.25, 0.5, 0.75, 1.0].map((f) => Math.floor(f * (total - 1)));
+}
 
-const PLAY_INTERVAL_MS = 800;
-
-export default function Home() {
-  const [topic, setTopic] = useState<TopicConfig>(TOPICS[0]);
+export default function Page() {
   const [dates, setDates] = useState<string[]>([]);
   const [currentDate, setCurrentDate] = useState<string>('');
   const [countries, setCountries] = useState<SentimentRow[]>([]);
-  const [mode, setMode] = useState<AnalysisMode>('sentiment');
-  const [dark, setDark] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [activeEvent, setActiveEvent] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load available dates whenever the topic changes
+  const mainRef = useRef<HTMLElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const mapWrapperRef = useRef<HTMLDivElement>(null);  // blur source
+  const darkOverlayRef = useRef<HTMLDivElement>(null); // dark overlay
+  const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const eventIndicesRef = useRef<number[]>([]);
+  const datesRef = useRef<string[]>([]);
+
   useEffect(() => {
-    setLoading(true);
-    setIsPlaying(false);
-    setDates([]);
-    setCurrentDate('');
-    setCountries([]);
-    fetch(`/api/sentiment/dates?file=${topic.file}`)
+    fetch(`/api/sentiment/dates?file=${TOPIC_FILE}`)
       .then((r) => r.json())
-      .then((data: DatesResponse) => {
+      .then((data: { dates: string[] }) => {
         setDates(data.dates);
-        if (data.dates.length > 0) setCurrentDate(data.dates[0]);
-        setLoading(false);
+        datesRef.current = data.dates;
+        if (data.dates.length > 0) {
+          setCurrentDate(data.dates[0]);
+          eventIndicesRef.current = getEventIndices(data.dates.length);
+        }
       })
       .catch(console.error);
-  }, [topic.file]);
+  }, []);
 
-  // Fetch country sentiment whenever the date changes
   useEffect(() => {
     if (!currentDate) return;
-    fetch(`/api/sentiment?date=${currentDate}&file=${topic.file}`)
+    fetch(`/api/sentiment?date=${currentDate}&file=${TOPIC_FILE}`)
       .then((r) => r.json())
-      .then((data: SentimentResponse) => setCountries(data.countries))
+      .then((data: { countries: SentimentRow[] }) => setCountries(data.countries))
       .catch(console.error);
-  }, [currentDate, topic.file]);
-
-  const advanceDate = useCallback(() => {
-    setCurrentDate((prev) => {
-      const idx = dates.indexOf(prev);
-      if (idx < 0 || idx >= dates.length - 1) {
-        setIsPlaying(false);
-        return prev;
-      }
-      return dates[idx + 1];
-    });
-  }, [dates]);
+  }, [currentDate]);
 
   useEffect(() => {
-    if (isPlaying) {
-      playTimerRef.current = setInterval(advanceDate, PLAY_INTERVAL_MS);
-    } else {
-      if (playTimerRef.current) clearInterval(playTimerRef.current);
+    if (!isPlaying || dates.length === 0) {
+      if (playIntervalRef.current) {
+        clearInterval(playIntervalRef.current);
+        playIntervalRef.current = null;
+      }
+      return;
     }
-    return () => { if (playTimerRef.current) clearInterval(playTimerRef.current); };
-  }, [isPlaying, advanceDate]);
+    playIntervalRef.current = setInterval(() => {
+      setCurrentDate((prev) => {
+        const d = datesRef.current;
+        const idx = d.indexOf(prev);
+        if (idx === -1 || idx >= d.length - 1) { setIsPlaying(false); return prev; }
+        return d[idx + 1];
+      });
+    }, 800);
+    return () => { if (playIntervalRef.current) clearInterval(playIntervalRef.current); };
+  }, [isPlaying, dates.length]);
 
-  const currentDateIndex = dates.indexOf(currentDate);
+  // Single scroll listener — drives blur, dark overlay, and timeline bar position.
+  //
+  // Section layout (each = 1 viewport height, scrollTop = n × vh at snap points):
+  //   0   Section 1 Landing   — blur=8px dark=0.7 (fully on)
+  //   1vh Section 2 Map       — blur=0   dark=0   (fully off → map visible)
+  //   2vh Section 3 Events    — timeline at top:0
+  //   3vh Section 4 Summary
+  //
+  // Overlay progress 0→1 as scrollTop goes 0→vh.
+  // Timeline progress 0→1 as scrollTop goes 1vh→2vh (same math as before).
+  useEffect(() => {
+    const scroll = mainRef.current;
+    if (!scroll) return;
+
+    const update = () => {
+      const vh = scroll.clientHeight;
+      const st = scroll.scrollTop;
+
+      // ── Blur + dark overlay (Section 1 → 2 transition) ──────────────────
+      const overlayT = Math.max(0, Math.min(1, st / vh)); // 0 at S1, 1 at S2+
+      if (mapWrapperRef.current) {
+        const blurPx = (1 - overlayT) * 8;
+        mapWrapperRef.current.style.filter = blurPx > 0.05 ? `blur(${blurPx}px)` : 'none';
+      }
+      if (darkOverlayRef.current) {
+        darkOverlayRef.current.style.opacity = String((1 - overlayT) * 0.7);
+      }
+
+      // ── Timeline bar (Section 2 bottom → Section 3 top) ─────────────────
+      const bar = timelineRef.current;
+      if (!bar) return;
+
+      if (st < vh * 0.5 || st >= vh * 2.5) {
+        bar.style.opacity = '0';
+        bar.style.pointerEvents = 'none';
+        return;
+      }
+
+      const barH = bar.offsetHeight || 56;
+      const tlProgress = Math.max(0, Math.min(1, (st - vh) / vh));
+      bar.style.top = `${(1 - tlProgress) * (vh - barH)}px`;
+
+      let tlOpacity = 1;
+      if (st < vh * 0.8) tlOpacity = (st - vh * 0.5) / (vh * 0.3);
+      else if (st > vh * 2.2) tlOpacity = (vh * 2.5 - st) / (vh * 0.3);
+      bar.style.opacity = String(Math.max(0, Math.min(1, tlOpacity)));
+      bar.style.pointerEvents = 'auto';
+    };
+
+    scroll.addEventListener('scroll', update, { passive: true });
+    update(); // set correct initial state
+    return () => scroll.removeEventListener('scroll', update);
+  }, []);
+
+  const handlePlay = useCallback(() => setIsPlaying((p) => !p), []);
+
+  const handleEventChange = useCallback((id: number) => {
+    setActiveEvent(id);
+    setIsPlaying(false);
+    const d = datesRef.current;
+    const indices = eventIndicesRef.current;
+    if (indices.length > 0 && d.length > 0) setCurrentDate(d[indices[id]] ?? d[0]);
+  }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-stone-100 font-sans">
-      <Header
-        mode={mode}
-        onModeChange={setMode}
-        dark={dark}
-        onDarkToggle={() => setDark(d => !d)}
-      />
-
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          countries={countries}
-          currentDateIndex={currentDateIndex}
-          dark={dark}
-          panelOpen={panelOpen}
-          onPanelToggle={() => setPanelOpen(o => !o)}
-        />
-
-        <main className="relative flex-1 flex flex-col overflow-hidden bg-[#ede9e1]">
-          {/* Topic selector */}
-          <div className="absolute top-3 right-4 z-10 flex gap-2">
-            {TOPICS.map((t) => (
-              <button
-                key={t.file}
-                onClick={() => setTopic(t)}
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                  t.file === topic.file
-                    ? 'bg-stone-800 text-white border-stone-800'
-                    : 'bg-white/80 text-stone-600 border-stone-300 hover:bg-white'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-1 relative">
-            <WorldMap countries={countries} mode={mode} />
-          </div>
-
-          <div className="shrink-0 bg-[#ede9e1]/95 px-8 pb-5 pt-8">
-            {dates.length > 0 && (
-              <Timeline
-                dates={dates}
-                currentDate={currentDate}
-                onChange={(d) => { setIsPlaying(false); setCurrentDate(d); }}
-                isPlaying={isPlaying}
-                onPlayPause={() => setIsPlaying((p) => !p)}
-                events={topic.events}
-                dark={dark}
-              />
-            )}
-          </div>
-
-          <div className="absolute bottom-16 left-1/2 -translate-x-1/2">
-            <Legend mode={mode} dark={dark} />
-          </div>
-        </main>
+    <>
+      {/*
+        Single map — fixed behind everything, never moves, pointer-events-none.
+        z-[1] so it sits below the scroll container (z-[3]) but above the raw page bg.
+      */}
+      <div ref={mapWrapperRef} className="fixed inset-0 z-[1] pointer-events-none">
+        <WorldMap countries={countries} mode="sentiment" />
       </div>
 
-      {loading && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-stone-100">
-          <div className="text-stone-500 text-sm animate-pulse">Loading data…</div>
-        </div>
-      )}
-    </div>
+      {/*
+        Dark overlay — same fixed layer, starts at opacity 0.7, dissolves on scroll.
+        Starts fully on (inline style) so SSR matches client initial state.
+      */}
+      <div
+        ref={darkOverlayRef}
+        className="fixed inset-0 z-[2] pointer-events-none bg-black"
+        style={{ opacity: 0.7 }}
+      />
+
+      {/*
+        Scroll container — z-[3] so it sits above the fixed layers.
+        bg-transparent so the fixed map + overlays show through Sections 1 and 2.
+        Sections 3 and 4 have solid backgrounds, covering the map.
+      */}
+      <main
+        ref={mainRef}
+        className="relative z-[3] h-screen overflow-y-scroll snap-y snap-mandatory bg-transparent"
+      >
+        <SectionLanding />
+        <SectionMap />
+        <SectionEvents
+          events={EVENTS}
+          activeEvent={activeEvent}
+          onEventChange={handleEventChange}
+        />
+        <SectionSummary />
+      </main>
+
+      {/* Timeline bar — fixed, position driven by scroll listener above */}
+      <div
+        ref={timelineRef}
+        className="fixed left-0 right-0 z-50 opacity-0 pointer-events-none"
+        style={{ top: '100vh' }}
+      >
+        <TimelineBar
+          events={EVENTS}
+          activeEvent={activeEvent}
+          isPlaying={isPlaying}
+          currentDate={currentDate}
+          onPlay={handlePlay}
+          onEventClick={handleEventChange}
+        />
+      </div>
+    </>
   );
 }
