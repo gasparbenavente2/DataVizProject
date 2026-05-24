@@ -76,6 +76,8 @@ export default function Home() {
   const [currentDate, setCurrentDate] = useState<string>('');
   const [countries, setCountries] = useState<SentimentRow[]>([]);
   const [mode, setMode] = useState<AnalysisMode>('sentiment');
+  const [dark, setDark] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const playTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -133,14 +135,17 @@ export default function Home() {
       <Header
         mode={mode}
         onModeChange={setMode}
-        title={topic.label}
+        dark={dark}
+        onDarkToggle={() => setDark(d => !d)}
       />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           countries={countries}
-          totalDates={dates.length}
           currentDateIndex={currentDateIndex}
+          dark={dark}
+          panelOpen={panelOpen}
+          onPanelToggle={() => setPanelOpen(o => !o)}
         />
 
         <main className="relative flex-1 flex flex-col overflow-hidden bg-[#ede9e1]">
@@ -174,12 +179,13 @@ export default function Home() {
                 isPlaying={isPlaying}
                 onPlayPause={() => setIsPlaying((p) => !p)}
                 events={topic.events}
+                dark={dark}
               />
             )}
           </div>
 
-          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-sm border border-stone-200 rounded-full px-4 py-1.5 shadow-sm">
-            <Legend mode={mode} />
+          <div className="absolute bottom-16 left-1/2 -translate-x-1/2">
+            <Legend mode={mode} dark={dark} />
           </div>
         </main>
       </div>
