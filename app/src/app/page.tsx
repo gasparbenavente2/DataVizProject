@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import SectionLanding from '@/components/SectionLanding';
 import SectionMap from '@/components/SectionMap';
 import SectionEvents from '@/components/SectionEvents';
@@ -10,6 +10,7 @@ import WorldMap from '@/components/WorldMap';
 import type { SentimentRow } from '@/types';
 
 const TOPIC_FILE = 'elon-musk-2015-01-2026-05';
+const SMOOTH_WINDOW = 7; // days to average for smoother map transitions
 
 const EVENTS = [
   { id: 0, label: 'EVENT1' },
@@ -19,24 +20,77 @@ const EVENTS = [
   { id: 4, label: 'EVENT5' },
 ];
 
-function getEventIndices(total: number): number[] {
-  return [0, 0.25, 0.5, 0.75, 1.0].map((f) => Math.floor(f * (total - 1)));
+const ERA_BOUNDARIES = [
+  '2015-01-01',
+  '2018-01-01',
+  '2020-01-01',
+  '2022-01-01',
+  '2023-01-01',
+];
+
+function getEraFromDate(date: string): number {
+  if (!date) return 0;
+  let era = 0;
+  for (let i = 0; i < ERA_BOUNDARIES.length; i++) {
+    if (date >= ERA_BOUNDARIES[i]) era = i;
+  }
+  return era;
+}
+
+function getEraStartIndices(dates: string[]): number[] {
+  return ERA_BOUNDARIES.map((boundary) => {
+    const idx = dates.findIndex((d) => d >= boundary);
+    return idx === -1 ? 0 : idx;
+  });
+}
+
+// Volume-weighted average across a buffer of daily country arrays.
+function computeRollingAvg(buffer: SentimentRow[][]): SentimentRow[] {
+  const acc = new Map<string, { weightedToneSum: number; totalCount: number }>();
+  for (const dayRows of buffer) {
+    for (const row of dayRows) {
+      if (row.avg_tone === null || row.article_count === 0) continue;
+      const prev = acc.get(row.country_iso3) ?? { weightedToneSum: 0, totalCount: 0 };
+      prev.weightedToneSum += row.avg_tone * row.article_count;
+      prev.totalCount += row.article_count;
+      acc.set(row.country_iso3, prev);
+    }
+  }
+  return Array.from(acc.entries()).map(([country_iso3, { weightedToneSum, totalCount }]) => ({
+    country_iso3,
+    avg_tone: totalCount > 0 ? weightedToneSum / totalCount : null,
+    article_count: Math.round(totalCount / buffer.length),
+  }));
 }
 
 export default function Page() {
   const [dates, setDates] = useState<string[]>([]);
-  const [currentDate, setCurrentDate] = useState<string>('');
+  const [eraIndices, setEraIndices] = useState<number[]>([]);
+  const [currentDateIdx, setCurrentDateIdx] = useState(0);
   const [countries, setCountries] = useState<SentimentRow[]>([]);
-  const [activeEvent, setActiveEvent] = useState(0);
+  const [activeEvent, setActiveEvent] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showScrubber, setShowScrubber] = useState(true);
 
+  const showScrubberRef = useRef(true);
+  const didResetToOverviewRef = useRef(false);
   const mainRef = useRef<HTMLElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const mapWrapperRef = useRef<HTMLDivElement>(null);  // blur source
-  const darkOverlayRef = useRef<HTMLDivElement>(null); // dark overlay
+  const mapWrapperRef = useRef<HTMLDivElement>(null);
+  const darkOverlayRef = useRef<HTMLDivElement>(null);
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const eventIndicesRef = useRef<number[]>([]);
+  const eraIndicesRef = useRef<number[]>([]);
   const datesRef = useRef<string[]>([]);
+  // Rolling average buffer
+  const countriesBufferRef = useRef<SentimentRow[][]>([]);
+  const prevDateIdxRef = useRef<number>(-1);
+
+  const currentDate = dates[currentDateIdx] ?? '';
+
+  const highlightedEra = useMemo(() => {
+    if (showScrubber) return getEraFromDate(currentDate);
+    return activeEvent;
+  }, [currentDate, showScrubber, activeEvent]);
 
   useEffect(() => {
     fetch(`/api/sentiment/dates?file=${TOPIC_FILE}`)
@@ -45,8 +99,9 @@ export default function Page() {
         setDates(data.dates);
         datesRef.current = data.dates;
         if (data.dates.length > 0) {
-          setCurrentDate(data.dates[0]);
-          eventIndicesRef.current = getEventIndices(data.dates.length);
+          const indices = getEraStartIndices(data.dates);
+          eraIndicesRef.current = indices;
+          setEraIndices(indices);
         }
       })
       .catch(console.error);
@@ -54,11 +109,24 @@ export default function Page() {
 
   useEffect(() => {
     if (!currentDate) return;
+
+    // Detect jump (non-sequential) and clear the rolling buffer if so
+    const prev = prevDateIdxRef.current;
+    if (prev !== -1 && Math.abs(currentDateIdx - prev) > 2) {
+      countriesBufferRef.current = [];
+    }
+    prevDateIdxRef.current = currentDateIdx;
+
     fetch(`/api/sentiment?date=${currentDate}&file=${TOPIC_FILE}`)
       .then((r) => r.json())
-      .then((data: { countries: SentimentRow[] }) => setCountries(data.countries))
+      .then((data: { countries: SentimentRow[] }) => {
+        const buf = [...countriesBufferRef.current, data.countries];
+        if (buf.length > SMOOTH_WINDOW) buf.shift();
+        countriesBufferRef.current = buf;
+        setCountries(computeRollingAvg(buf));
+      })
       .catch(console.error);
-  }, [currentDate]);
+  }, [currentDate, currentDateIdx]);
 
   useEffect(() => {
     if (!isPlaying || dates.length === 0) {
@@ -69,26 +137,14 @@ export default function Page() {
       return;
     }
     playIntervalRef.current = setInterval(() => {
-      setCurrentDate((prev) => {
-        const d = datesRef.current;
-        const idx = d.indexOf(prev);
-        if (idx === -1 || idx >= d.length - 1) { setIsPlaying(false); return prev; }
-        return d[idx + 1];
+      setCurrentDateIdx((prev) => {
+        if (prev >= datesRef.current.length - 1) { setIsPlaying(false); return prev; }
+        return prev + 1;
       });
-    }, 800);
+    }, 200);
     return () => { if (playIntervalRef.current) clearInterval(playIntervalRef.current); };
   }, [isPlaying, dates.length]);
 
-  // Single scroll listener — drives blur, dark overlay, and timeline bar position.
-  //
-  // Section layout (each = 1 viewport height, scrollTop = n × vh at snap points):
-  //   0   Section 1 Landing   — blur=8px dark=0.7 (fully on)
-  //   1vh Section 2 Map       — blur=0   dark=0   (fully off → map visible)
-  //   2vh Section 3 Events    — timeline at top:0
-  //   3vh Section 4 Summary
-  //
-  // Overlay progress 0→1 as scrollTop goes 0→vh.
-  // Timeline progress 0→1 as scrollTop goes 1vh→2vh (same math as before).
   useEffect(() => {
     const scroll = mainRef.current;
     if (!scroll) return;
@@ -97,77 +153,78 @@ export default function Page() {
       const vh = scroll.clientHeight;
       const st = scroll.scrollTop;
 
-      // ── Blur + dark overlay (Section 1 → 2 transition) ──────────────────
-      const overlayT = Math.max(0, Math.min(1, st / vh)); // 0 at S1, 1 at S2+
+      const overlayT = Math.max(0, Math.min(1, st / vh));
       if (mapWrapperRef.current) {
         const blurPx = (1 - overlayT) * 8;
         mapWrapperRef.current.style.filter = blurPx > 0.05 ? `blur(${blurPx}px)` : 'none';
       }
       if (darkOverlayRef.current) {
-        darkOverlayRef.current.style.opacity = String((1 - overlayT) * 0.7);
+        darkOverlayRef.current.style.opacity = String((1 - overlayT) * 0.75);
       }
 
-      // ── Timeline bar (Section 2 bottom → Section 3 top) ─────────────────
       const bar = timelineRef.current;
       if (!bar) return;
 
-      if (st < vh * 0.5 || st >= vh * 2.5) {
+      if (st < vh * 0.5 || st >= vh * 2.9) {
         bar.style.opacity = '0';
         bar.style.pointerEvents = 'none';
         return;
       }
 
-      const barH = bar.offsetHeight || 56;
+      const barH = bar.offsetHeight || 60;
       const tlProgress = Math.max(0, Math.min(1, (st - vh) / vh));
       bar.style.top = `${(1 - tlProgress) * (vh - barH)}px`;
 
       let tlOpacity = 1;
       if (st < vh * 0.8) tlOpacity = (st - vh * 0.5) / (vh * 0.3);
-      else if (st > vh * 2.2) tlOpacity = (vh * 2.5 - st) / (vh * 0.3);
+      else if (st > vh * 2.6) tlOpacity = (vh * 2.9 - st) / (vh * 0.3);
       bar.style.opacity = String(Math.max(0, Math.min(1, tlOpacity)));
       bar.style.pointerEvents = 'auto';
+
+      const wantScrubber = tlProgress < 0.8;
+      if (showScrubberRef.current !== wantScrubber) {
+        showScrubberRef.current = wantScrubber;
+        setShowScrubber(wantScrubber);
+      }
+
+      if (st >= vh * 1.9 && !didResetToOverviewRef.current) {
+        didResetToOverviewRef.current = true;
+        setActiveEvent(-1);
+      } else if (st < vh * 1.5) {
+        didResetToOverviewRef.current = false;
+      }
     };
 
     scroll.addEventListener('scroll', update, { passive: true });
-    update(); // set correct initial state
+    update();
     return () => scroll.removeEventListener('scroll', update);
   }, []);
 
   const handlePlay = useCallback(() => setIsPlaying((p) => !p), []);
 
+  const handleDateChange = useCallback((idx: number) => {
+    setCurrentDateIdx(idx);
+    setIsPlaying(false);
+  }, []);
+
   const handleEventChange = useCallback((id: number) => {
     setActiveEvent(id);
     setIsPlaying(false);
-    const d = datesRef.current;
-    const indices = eventIndicesRef.current;
-    if (indices.length > 0 && d.length > 0) setCurrentDate(d[indices[id]] ?? d[0]);
+    if (id === -1) return;
+    const indices = eraIndicesRef.current;
+    if (indices.length > 0) setCurrentDateIdx(indices[id] ?? 0);
   }, []);
 
   return (
     <>
-      {/*
-        Single map — fixed behind everything, never moves, pointer-events-none.
-        z-[1] so it sits below the scroll container (z-[3]) but above the raw page bg.
-      */}
       <div ref={mapWrapperRef} className="fixed inset-0 z-[1] pointer-events-none">
         <WorldMap countries={countries} mode="sentiment" />
       </div>
-
-      {/*
-        Dark overlay — same fixed layer, starts at opacity 0.7, dissolves on scroll.
-        Starts fully on (inline style) so SSR matches client initial state.
-      */}
       <div
         ref={darkOverlayRef}
-        className="fixed inset-0 z-[2] pointer-events-none bg-black"
-        style={{ opacity: 0.7 }}
+        className="fixed inset-0 z-[2] pointer-events-none"
+        style={{ opacity: 0.75, background: '#00021a' }}
       />
-
-      {/*
-        Scroll container — z-[3] so it sits above the fixed layers.
-        bg-transparent so the fixed map + overlays show through Sections 1 and 2.
-        Sections 3 and 4 have solid backgrounds, covering the map.
-      */}
       <main
         ref={mainRef}
         className="relative z-[3] h-screen overflow-y-scroll snap-y snap-mandatory bg-transparent"
@@ -178,11 +235,12 @@ export default function Page() {
           events={EVENTS}
           activeEvent={activeEvent}
           onEventChange={handleEventChange}
+          eraIndices={eraIndices}
+          totalDates={dates.length}
         />
         <SectionSummary />
       </main>
 
-      {/* Timeline bar — fixed, position driven by scroll listener above */}
       <div
         ref={timelineRef}
         className="fixed left-0 right-0 z-50 opacity-0 pointer-events-none"
@@ -190,10 +248,14 @@ export default function Page() {
       >
         <TimelineBar
           events={EVENTS}
-          activeEvent={activeEvent}
+          highlightedEra={highlightedEra}
           isPlaying={isPlaying}
-          currentDate={currentDate}
+          dates={dates}
+          eraIndices={eraIndices}
+          currentDateIdx={currentDateIdx}
+          showScrubber={showScrubber}
           onPlay={handlePlay}
+          onDateChange={handleDateChange}
           onEventClick={handleEventChange}
         />
       </div>

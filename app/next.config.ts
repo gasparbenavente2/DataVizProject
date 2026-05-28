@@ -6,6 +6,7 @@ const isStaticExport = process.env.STATIC_EXPORT === 'true';
 
 const nextConfig: NextConfig = {
   eslint: { ignoreDuringBuilds: true },
+  devIndicators: false,
   ...(isStaticExport && {
     output: 'export',
     basePath: '/perspectiva',

@@ -1,107 +1,164 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { X } from 'lucide-react';
+import { useState } from 'react';
 
 const CARDS = [
-  { id: 'card-1', title: 'CARD1', body: 'Placeholder body text for card 1.' },
-  { id: 'card-2', title: 'CARD2', body: 'Placeholder body text for card 2.' },
-  { id: 'card-3', title: 'CARD3', body: 'Placeholder body text for card 3.' },
-  { id: 'card-4', title: 'CARD4', body: 'Placeholder body text for card 4.' },
+  {
+    id: 0,
+    title: 'Which countries changed their opinion the most?',
+    detail: null,
+  },
+  {
+    id: 1,
+    title: 'Most used word per country',
+    detail: null,
+  },
+  {
+    id: 2,
+    title: 'Most negative VS most positive countries',
+    detail: null,
+  },
+  {
+    id: 3,
+    title: 'Articles overview',
+    detail: 'articles',
+  },
+];
+
+const ARTICLES = [
+  {
+    source: 'Indonesian Times',
+    date: '24. May 2026',
+    iso: 'IDN',
+    sentiment: '38% negative',
+    negative: true,
+    headline: "Musk's SpaceX Reveals its Finances for the First Time",
+  },
+  {
+    source: 'News of the SunShineCoast',
+    date: '24. May 2017',
+    iso: 'AUS',
+    sentiment: '89% positive',
+    negative: false,
+    headline: "Musk's Tesla project expected to cut gas use in half by 2020",
+  },
 ];
 
 export default function SectionSummary() {
-  const [expanded, setExpanded] = useState<string | null>(null);
-  // Separate mounted flag so the CSS transition plays on open, not just on mount.
-  const [visible, setVisible] = useState(false);
+  const [selected, setSelected] = useState(3); // articles card open by default
 
-  // When a card is selected, let it mount first (opacity:0) then transition in.
-  useEffect(() => {
-    if (expanded) {
-      // Next tick: flip to visible so the transition runs
-      const id = requestAnimationFrame(() => setVisible(true));
-      return () => cancelAnimationFrame(id);
-    } else {
-      setVisible(false);
-    }
-  }, [expanded]);
-
-  // Close on Escape
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(null); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
-
-  const expandedCard = CARDS.find((c) => c.id === expanded);
+  const activeCard = CARDS[selected];
 
   return (
-    <section className="h-screen bg-[#111111] flex flex-col items-center justify-center px-8 snap-start shrink-0">
-      <p className="text-xs tracking-[0.3em] text-neutral-500 uppercase mb-3">
-        SUMMARY_SUBTITLE
-      </p>
-      <h2 className="text-5xl font-bold text-white text-center mb-12 max-w-2xl leading-tight">
-        SUMMARY_TITLE
-      </h2>
-
-      <div className="grid grid-cols-2 gap-6 w-full max-w-3xl">
-        {CARDS.map((card) => (
-          <Card
-            key={card.id}
-            onClick={() => setExpanded(card.id)}
-            className="bg-[#1a1a1a] border-white/10 text-white cursor-pointer h-40
-                       hover:border-[#C97432] hover:scale-[1.02]
-                       transition-all duration-200 ease-out"
-          >
-            <CardHeader className="pb-2">
-              <CardTitle className="text-neutral-200 text-base">{card.title}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-neutral-500 text-sm">{card.body}</p>
-            </CardContent>
-          </Card>
-        ))}
+    <section
+      className="h-screen snap-start shrink-0 flex flex-col justify-center px-12 py-12"
+      style={{ background: '#00021a' }}
+    >
+      {/* Title */}
+      <div className="mb-8 shrink-0">
+        <h2 className="text-6xl font-bold leading-tight" style={{ color: '#ecf2ff' }}>
+          The Global View
+        </h2>
+        <p className="text-base mt-1" style={{ color: '#7683a6' }}>
+          2015 to 2026 — summarized
+        </p>
       </div>
 
-      {/* ── Expanded card overlay ─────────────────────────────────────── */}
-      {expanded && (
-        // Backdrop — click to close
+      {/* Two-column layout: small cards | detail panel */}
+      <div className="flex-1 flex gap-6 min-h-0">
+
+        {/* Left: 4 small cards in a 2×2 grid */}
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center"
-          onClick={() => setExpanded(null)}
+          className="grid gap-3"
+          style={{
+            width: '45%',
+            gridTemplateColumns: '1fr 1fr',
+            gridTemplateRows: '1fr 1fr',
+          }}
         >
-          {/* Dark backdrop fades in */}
-          <div
-            className="absolute inset-0 bg-black transition-opacity duration-300 ease-out"
-            style={{ opacity: visible ? 0.8 : 0 }}
-          />
+          {CARDS.map((card) => {
+            const isSelected = selected === card.id;
+            return (
+              <button
+                key={card.id}
+                onClick={() => setSelected(card.id)}
+                className="rounded-xl p-5 text-left flex items-start transition-all duration-200"
+                style={{
+                  border: isSelected
+                    ? '1px solid rgba(236,242,255,0.5)'
+                    : '1px solid rgba(118,131,166,0.2)',
+                  background: isSelected ? 'rgba(236,242,255,0.05)' : '#060e28',
+                  transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+                  // Last card spans 2 columns
+                }}
+              >
+                <p
+                  className="text-sm leading-snug"
+                  style={{ color: isSelected ? '#ecf2ff' : '#7683a6' }}
+                >
+                  {card.title}
+                </p>
+              </button>
+            );
+          })}
+        </div>
 
-          {/* Card panel — scales + fades in from slightly smaller */}
+        {/* Right: Detail panel — animates on card change */}
+        <div
+          className="flex-1 rounded-2xl p-8 flex flex-col min-h-0"
+          style={{ border: '1px solid rgba(118,131,166,0.2)', background: '#060e28' }}
+        >
+          {/* Animated content wrapper — key change triggers CSS animation */}
           <div
-            className="relative z-10 w-[85vw] h-[80vh] bg-[#1a1a1a] border border-white/10
-                       rounded-2xl p-10 shadow-2xl
-                       transition-all duration-300 ease-out"
-            style={{
-              opacity: visible ? 1 : 0,
-              transform: visible ? 'scale(1)' : 'scale(0.92)',
-            }}
-            onClick={(e) => e.stopPropagation()}
+            key={selected}
+            style={{ animation: 'fadeSlideIn 250ms ease forwards', flex: 1, display: 'flex', flexDirection: 'column' }}
           >
-            {/* Close button */}
-            <button
-              onClick={() => setExpanded(null)}
-              className="absolute top-4 right-4 text-neutral-500 hover:text-white transition-colors"
-              aria-label="Close"
-            >
-              <X className="size-5" />
-            </button>
+            <p className="text-sm font-medium mb-5" style={{ color: '#7683a6' }}>
+              {activeCard.title}
+            </p>
 
-            <h2 className="text-2xl font-bold text-white mb-4">{expandedCard?.title}</h2>
-            <p className="text-neutral-400 leading-relaxed">{expandedCard?.body}</p>
+            {activeCard.detail === 'articles' ? (
+              /* Articles card */
+              <div className="flex flex-col gap-6">
+                {ARTICLES.map((a, i) => (
+                  <div key={i}>
+                    {i > 0 && (
+                      <div
+                        className="mb-6"
+                        style={{ height: '1px', background: 'rgba(118,131,166,0.15)' }}
+                      />
+                    )}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm" style={{ color: '#7683a6' }}>
+                        {a.source} · {a.date}, {a.iso}
+                      </span>
+                      <span
+                        className="text-sm font-medium"
+                        style={{ color: a.negative ? '#ef4444' : '#22c55e' }}
+                      >
+                        {a.sentiment}
+                      </span>
+                    </div>
+                    <p className="text-2xl font-bold leading-snug" style={{ color: '#ecf2ff' }}>
+                      {a.headline}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* Placeholder for other cards */
+              <div
+                className="flex-1 rounded-xl flex items-center justify-center"
+                style={{ border: '1px solid rgba(118,131,166,0.12)', background: 'rgba(118,131,166,0.04)' }}
+              >
+                <span className="text-sm" style={{ color: 'rgba(118,131,166,0.4)' }}>
+                  visualization placeholder
+                </span>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </section>
   );
 }

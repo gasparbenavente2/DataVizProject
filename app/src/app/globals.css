@@ -6,8 +6,15 @@
 /* ── Base tokens ── */
 :root {
   color-scheme: dark;
-  --map-bg: #0f172a;
-  --map-border: #1e293b;
+  --map-bg: #00021a;
+  --map-border: #0d1a30;
+  --color-bg: #00021a;
+  --color-text: #ecf2ff;
+  --color-muted: #7683a6;
+  --color-border: rgba(118, 131, 166, 0.25);
+  --color-card: #060e28;
+  --color-positive: #22c55e;
+  --color-negative: #ef4444;
 }
 
 /* ── Base ── */
@@ -18,17 +25,23 @@ html {
 }
 
 body {
-  font-family: var(--font-geist-sans, system-ui, sans-serif);
+  font-family: var(--font-telenor, system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
-  background: #0d0d0d;
-  color: #f0ede8;
+  background: #00021a;
+  color: #ecf2ff;
 }
 
 /* ── Hide scrollbar (used on horizontal carousel) ── */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
-/* ── Range slider (used by WorldMap tooltip positioning) ── */
+/* ── Summary card zoom animation ── */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Range slider ── */
 input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
@@ -42,7 +55,7 @@ input[type='range']::-webkit-slider-thumb {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #C97432;
+  background: #7683a6;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
   transition: transform 0.15s;
@@ -54,7 +67,7 @@ input[type='range']::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #C97432;
+  background: #7683a6;
   cursor: pointer;
   border: none;
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);

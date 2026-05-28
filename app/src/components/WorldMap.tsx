@@ -13,7 +13,7 @@ import type { SentimentRow } from '@/types';
 
 export type AnalysisMode = 'sentiment' | 'amount';
 
-// Light cream map style — no external tiles
+// Dark navy map style — no external tiles
 const LIGHT_STYLE = {
   version: 8 as const,
   sources: {},
@@ -21,44 +21,39 @@ const LIGHT_STYLE = {
     {
       id: 'background',
       type: 'background' as const,
-      paint: { 'background-color': '#ede9e1' },
+      paint: { 'background-color': '#050c1e' },
     },
   ],
 };
 
-// Sentiment: beige (no data) → red (negative) or green (positive)
+// Sentiment: dark navy (no data) → red (negative) or green (positive)
 function sentimentColor(tone: number | null, count: number): string {
-  if (count === 0 || tone === null) return '#ddd9d0'; // beige — no coverage
+  if (count === 0 || tone === null) return '#0d1b2e'; // dark navy — no coverage
   const t = Math.max(-10, Math.min(10, tone));
   if (t < 0) {
-    const r = Math.round(-t / 10);
-    const r2 = Math.round(180 + r * (160 - 180));
-    const g2 = Math.round(60 + r * (30 - 60));
-    const b2 = Math.round(60 + r * (40 - 60));
-    // negative: beige → crimson
     const ratio = Math.min(1, -t / 6);
-    const r3 = Math.round(221 + ratio * (160 - 221));
-    const g3 = Math.round(217 + ratio * (30 - 217));
-    const b3 = Math.round(208 + ratio * (30 - 208));
-    return `rgb(${r3},${g3},${b3})`;
+    // dark navy → crimson
+    const r = Math.round(13 + ratio * (220 - 13));
+    const g = Math.round(27 + ratio * (38 - 27));
+    const b = Math.round(46 + ratio * (38 - 46));
+    return `rgb(${r},${g},${b})`;
   } else {
-    // positive: beige → green
     const ratio = Math.min(1, t / 6);
-    const r3 = Math.round(221 + ratio * (60 - 221));
-    const g3 = Math.round(217 + ratio * (150 - 217));
-    const b3 = Math.round(208 + ratio * (80 - 208));
-    return `rgb(${r3},${g3},${b3})`;
+    // dark navy → green
+    const r = Math.round(13 + ratio * (34 - 13));
+    const g = Math.round(27 + ratio * (197 - 27));
+    const b = Math.round(46 + ratio * (94 - 46));
+    return `rgb(${r},${g},${b})`;
   }
 }
 
-// Amount: beige (0) → deep orange (max)
+// Amount: dark navy (0) → muted blue (max)
 function amountColor(count: number, maxCount: number): string {
-  if (count === 0 || maxCount === 0) return '#ddd9d0';
+  if (count === 0 || maxCount === 0) return '#0d1b2e';
   const ratio = Math.min(1, count / maxCount);
-  // beige (#ddd9d0) → orange (#C97432)
-  const r = Math.round(221 + ratio * (201 - 221));
-  const g = Math.round(217 + ratio * (116 - 217));
-  const b = Math.round(208 + ratio * (50 - 208));
+  const r = Math.round(13 + ratio * (118 - 13));
+  const g = Math.round(27 + ratio * (131 - 27));
+  const b = Math.round(46 + ratio * (166 - 46));
   return `rgb(${r},${g},${b})`;
 }
 
@@ -80,9 +75,9 @@ function buildFillExpression(
   }
   // 'match' needs at least one input→output pair before the fallback
   if (pairs.length === 0) {
-    return ['match', ['get', 'ADM0_A3'], 'XXX', '#ddd9d0', '#ddd9d0'] as unknown as ExpressionSpecification;
+    return ['match', ['get', 'ADM0_A3'], 'XXX', '#0d1b2e', '#0d1b2e'] as unknown as ExpressionSpecification;
   }
-  return ['match', ['get', 'ADM0_A3'], ...pairs, '#ddd9d0'] as unknown as ExpressionSpecification;
+  return ['match', ['get', 'ADM0_A3'], ...pairs, '#0d1b2e'] as unknown as ExpressionSpecification;
 }
 
 interface Tooltip {
@@ -121,7 +116,7 @@ export default function WorldMap({ countries, mode }: WorldMapProps) {
     type: 'line',
     source: 'countries',
     paint: {
-      'line-color': '#c8c4bc',
+      'line-color': 'rgba(118,131,166,0.2)',
       'line-width': 0.5,
     },
   };
@@ -186,36 +181,48 @@ export default function WorldMap({ countries, mode }: WorldMapProps) {
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="absolute pointer-events-none z-10 bg-white/95 border border-stone-200 rounded-lg px-3 py-2 text-stone-800 text-sm shadow-lg"
+          className="absolute pointer-events-none z-10 rounded-xl px-5 py-4 shadow-2xl"
           style={{
-            left: tooltip.x + 12,
-            top: tooltip.y - 10,
+            left: tooltip.x + 14,
+            top: tooltip.y - 14,
+            background: '#060e28',
+            border: '1px solid rgba(118,131,166,0.2)',
             transform:
               typeof window !== 'undefined' && tooltip.x > window.innerWidth * 0.65
                 ? 'translateX(-110%)'
                 : undefined,
           }}
         >
-          <div className="font-semibold">{tooltip.name}</div>
-          {mode === 'sentiment' ? (
-            <div className="text-stone-500 text-xs mt-0.5">
-              {tooltip.tone !== null && tooltip.count > 0 ? (
-                <>
-                  Tone:{' '}
-                  <span className={tooltip.tone < 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
-                    {tooltip.tone.toFixed(2)}
-                  </span>
-                </>
-              ) : (
-                <span className="text-stone-400">No coverage</span>
-              )}
+          <div className="text-xl font-bold" style={{ color: '#ecf2ff' }}>
+            {tooltip.name}
+          </div>
+          <div className="text-xs mt-0.5" style={{ color: '#7683a6' }}>
+            sentiment score · {tooltip.tone !== null ? new Date().getFullYear() : '—'}
+          </div>
+          {mode === 'sentiment' && (
+            <div
+              className="text-4xl font-bold mt-1"
+              style={{
+                color:
+                  tooltip.tone === null || tooltip.count === 0
+                    ? '#7683a6'
+                    : tooltip.tone < 0
+                    ? '#ef4444'
+                    : '#22c55e',
+              }}
+            >
+              {tooltip.tone !== null && tooltip.count > 0
+                ? tooltip.tone.toFixed(2)
+                : '—'}
             </div>
-          ) : (
-            <div className="text-stone-500 text-xs mt-0.5">
-              {tooltip.count > 0 ? (
-                <span className="text-orange-600 font-medium">{tooltip.count} articles</span>
-              ) : (
-                <span className="text-stone-400">No coverage</span>
+          )}
+          {mode === 'amount' && (
+            <div className="text-3xl font-bold mt-1" style={{ color: '#ecf2ff' }}>
+              {tooltip.count > 0 ? tooltip.count.toLocaleString() : '—'}
+              {tooltip.count > 0 && (
+                <span className="text-sm font-normal ml-1" style={{ color: '#7683a6' }}>
+                  articles
+                </span>
               )}
             </div>
           )}
