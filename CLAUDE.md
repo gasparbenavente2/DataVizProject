@@ -122,3 +122,111 @@ The static build uses mock/no data; real data requires running the app locally w
 
 ## Course
 EPFL COM-480 Data Visualization — Milestone 3 due 2026-05-29
+
+---
+
+## Task: Implement Charts in SectionEvents.tsx
+
+> **Status**: Not yet implemented. This section gives you everything you need to build the two chart placeholders in `app/src/components/SectionEvents.tsx`.
+
+### What to build
+
+There are two placeholder areas currently showing grey labels:
+
+**1. Overview slide chart** (`app/src/components/SectionEvents.tsx`, Slide 0)
+- Location: the `<div className="flex-1 relative overflow-hidden">` block that contains the "sentiment timeline chart" label (around line 181)
+- Replace the inner placeholder with a full-width Recharts `ComposedChart`:
+  - `Area` for total `article_count` per day (volume — fills bottom, muted color `rgba(118,131,166,0.15)`)
+  - `Line` for global `avg_tone` per day (the main signal — white or gradient-colored)
+  - `ReferenceArea` per era band using the `eraProportions` array already computed in the component (these map directly to x-domain positions — use the date strings as x values)
+  - `ReferenceLine` at y=0 (the neutral baseline)
+  - Keep era band background divs that already exist behind the chart; the Recharts chart goes on top with `background="transparent"`
+  - Wrap in `<ResponsiveContainer width="100%" height="100%">`
+
+**2. Era mini sparklines** (`app/src/components/SectionEvents.tsx`, Era cards, Slides 1–5)
+- Location: the `<div className="h-14 ...">` box with a "chart" label inside the left column of each era card (around line 278)
+- Replace with a pure SVG sparkline (no library needed for this size):
+  - Filter the global timeline to the era's date range (`era.dateRange` gives the years; use `ERA_BOUNDARIES` for exact dates)
+  - Normalize the `avg_tone` values to SVG coordinates (viewBox `0 0 200 56`)
+  - Draw a `<path>` for the line
+  - Draw a zero-baseline `<line>`
+  - Fill area below/above 0 with red/green at low opacity
+
+### Data gap — you must add a new API endpoint first
+
+The current API only returns data for one date at a time. The charts need the **full time series aggregated globally**. Add:
+
+**Step 1 — New query in `app/src/lib/queries.ts`**
+
+Add a function `getGlobalTimeline(file: string)` that:
+- Reads all rows from the parquet using the existing hyparquet setup (follow the pattern of `getSentimentByDate`)
+- Groups by `date` in JavaScript
+- Computes volume-weighted `avg_tone` per day: `sum(avg_tone * article_count) / sum(article_count)`
+- Returns `{ date: string, avg_tone: number, article_count: number }[]` sorted by date ascending
+
+**Step 2 — New API route `app/src/app/api/sentiment/timeline/route.ts`**
+
+```ts
+// GET /api/sentiment/timeline?file=<name>
+// Returns: { timeline: { date: string, avg_tone: number, article_count: number }[] }
+```
+
+- Validate `file` param with the same regex used in the other routes (`/^[a-zA-Z0-9-]+$/`)
+- Call `getGlobalTimeline(file)` and return as JSON
+- Follow the exact same pattern as `app/src/app/api/sentiment/route.ts`
+
+**Step 3 — Fetch in `SectionEvents.tsx` (or `page.tsx`)**
+
+Option A (simpler): fetch inside `SectionEvents` on mount with `useEffect`, store in local state:
+```ts
+const [timeline, setTimeline] = useState<TimelineRow[]>([]);
+useEffect(() => {
+  fetch(`/api/sentiment/timeline?file=${TOPIC_FILE}`)
+    .then(r => r.json())
+    .then(d => setTimeline(d.timeline));
+}, []);
+```
+
+Option B: fetch in `page.tsx` and pass as a prop to `SectionEvents` (consistent with how `eraIndices` and `dates` are already passed).
+
+Use whichever is cleaner. The `TOPIC_FILE` constant is defined in `page.tsx` as `'elon-musk-2015-01-2026-05'`.
+
+### Install Recharts
+
+```bash
+cd app && npm install recharts
+```
+
+Recharts has types bundled — no `@types/recharts` needed.
+
+### Design constraints — match the existing aesthetic
+
+The site uses a dark navy palette. Stick to these values:
+- Background: `#00021a` / `#060e28`
+- Muted text/borders: `#7683a6` / `rgba(118,131,166,0.x)`
+- Positive sentiment: `#22c55e` (green)
+- Negative sentiment: `#ef4444` (red)
+- Primary text: `#ecf2ff`
+- Chart axes/grid: `rgba(118,131,166,0.15)` — very subtle, don't overpower the line
+- Do NOT add tooltips or legends unless they are very minimal and match the palette
+
+For the sentiment line color: you can use a single white/light line, or split into green/red segments at y=0. A single colored line is simpler; segmented is more expressive.
+
+### Files to touch
+
+| File | What to do |
+|---|---|
+| `app/src/lib/queries.ts` | Add `getGlobalTimeline(file)` |
+| `app/src/app/api/sentiment/timeline/route.ts` | Create new route |
+| `app/src/components/SectionEvents.tsx` | Replace both placeholder divs with real charts |
+| `app/package.json` | Add `recharts` via `npm install recharts` |
+
+Do not modify `page.tsx` unless you choose Option B for the fetch location.
+
+### Verification
+
+1. `cd app && npm run dev`
+2. Open http://localhost:3000 and scroll to the third section (Events)
+3. Overview slide: confirm timeline chart fills the full height, era bands are visible, sentiment line moves over time
+4. Swipe/scroll through era cards: confirm each `h-14` box shows a sparkline for that era's date range
+5. No console errors about missing data
