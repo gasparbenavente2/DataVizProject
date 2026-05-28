@@ -10,7 +10,7 @@ import WorldMap from '@/components/WorldMap';
 import type { SentimentRow } from '@/types';
 
 const TOPIC_FILE = 'elon-musk-2015-01-2026-05';
-const SMOOTH_WINDOW = 7; // days to average for smoother map transitions
+const SMOOTH_WINDOW = 30; // days to average for smoother map transitions
 
 const EVENTS = [
   { id: 0, label: 'EVENT1' },
@@ -69,6 +69,7 @@ export default function Page() {
   const [currentDateIdx, setCurrentDateIdx] = useState(0);
   const [countries, setCountries] = useState<SentimentRow[]>([]);
   const [activeEvent, setActiveEvent] = useState<number>(-1);
+  const [carouselProgress, setCarouselProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showScrubber, setShowScrubber] = useState(true);
 
@@ -207,6 +208,10 @@ export default function Page() {
     setIsPlaying(false);
   }, []);
 
+  const handleScrollProgress = useCallback((p: number) => {
+    setCarouselProgress(p);
+  }, []);
+
   const handleEventChange = useCallback((id: number) => {
     setActiveEvent(id);
     setIsPlaying(false);
@@ -235,6 +240,7 @@ export default function Page() {
           events={EVENTS}
           activeEvent={activeEvent}
           onEventChange={handleEventChange}
+          onScrollProgress={handleScrollProgress}
           eraIndices={eraIndices}
           totalDates={dates.length}
         />
@@ -249,6 +255,7 @@ export default function Page() {
         <TimelineBar
           events={EVENTS}
           highlightedEra={highlightedEra}
+          carouselProgress={carouselProgress}
           isPlaying={isPlaying}
           dates={dates}
           eraIndices={eraIndices}

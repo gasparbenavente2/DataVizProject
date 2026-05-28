@@ -11,6 +11,7 @@ interface SectionEventsProps {
   events: Event[];
   activeEvent: number; // -1 = overview, 0-4 = era
   onEventChange: (id: number) => void;
+  onScrollProgress?: (progress: number) => void; // 0=overview, 1=era0, 2=era1...
   eraIndices?: number[];
   totalDates?: number;
 }
@@ -99,7 +100,7 @@ function activeToCarouselPos(activeEvent: number): number {
   return activeEvent === -1 ? 0 : activeEvent + 1;
 }
 
-export default function SectionEvents({ events, activeEvent, onEventChange, eraIndices, totalDates }: SectionEventsProps) {
+export default function SectionEvents({ events, activeEvent, onEventChange, onScrollProgress, eraIndices, totalDates }: SectionEventsProps) {
   const carouselRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -126,15 +127,17 @@ export default function SectionEvents({ events, activeEvent, onEventChange, eraI
 
   // Report back when user manually swipes
   const handleScroll = useCallback(() => {
+    const el = carouselRef.current;
+    if (!el) return;
+    // Continuous — fires on every scroll frame for smooth TimelineBar highlighting
+    onScrollProgress?.(el.scrollLeft / el.clientWidth);
+    // Debounced — fires once scroll settles to update activeEvent
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      const el = carouselRef.current;
-      if (!el) return;
       const pos = Math.round(el.scrollLeft / el.clientWidth);
-      // pos 0 = overview, pos 1-5 = eras 0-4
       onEventChange(pos === 0 ? -1 : pos - 1);
     }, 80);
-  }, [onEventChange]);
+  }, [onEventChange, onScrollProgress]);
 
   return (
     <section

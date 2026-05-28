@@ -1,5 +1,7 @@
 'use client';
 
+const BG = '#00021a';
+
 const STATS = [
   { label: 'Articles analyzed', value: '102,936', since: '2015', negative: false },
   { label: 'Countries covering', value: '156', since: '2015', negative: false },
@@ -30,7 +32,8 @@ export default function SectionLanding() {
             key={s.label}
             className="flex flex-col gap-2 px-6 py-5 rounded-xl"
             style={{
-              border: '1px solid rgba(118,131,166,0.3)',
+              border: '2px solid transparent',
+              background: `linear-gradient(${BG}, ${BG}) padding-box, linear-gradient(135deg, #24355f, #7683a6) border-box`,
               minWidth: '180px',
             }}
           >

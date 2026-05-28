@@ -84,10 +84,10 @@ export default function SectionSummary() {
                 onClick={() => setSelected(card.id)}
                 className="rounded-xl p-5 text-left flex items-start transition-all duration-200"
                 style={{
-                  border: isSelected
-                    ? '1px solid rgba(236,242,255,0.5)'
-                    : '1px solid rgba(118,131,166,0.2)',
-                  background: isSelected ? 'rgba(236,242,255,0.05)' : '#060e28',
+                  border: '2px solid transparent',
+                  background: isSelected
+                    ? 'linear-gradient(rgba(236,242,255,0.05), rgba(236,242,255,0.05)) padding-box, linear-gradient(135deg, #ecf2ff44, #ecf2ff99) border-box'
+                    : 'linear-gradient(#060e28, #060e28) padding-box, linear-gradient(135deg, #24355f, #7683a6) border-box',
                   transform: isSelected ? 'scale(1.02)' : 'scale(1)',
                   // Last card spans 2 columns
                 }}
@@ -106,7 +106,7 @@ export default function SectionSummary() {
         {/* Right: Detail panel — animates on card change */}
         <div
           className="flex-1 rounded-2xl p-8 flex flex-col min-h-0"
-          style={{ border: '1px solid rgba(118,131,166,0.2)', background: '#060e28' }}
+          style={{ border: '2px solid transparent', background: 'linear-gradient(#060e28, #060e28) padding-box, linear-gradient(135deg, #24355f, #7683a6) border-box' }}
         >
           {/* Animated content wrapper — key change triggers CSS animation */}
           <div

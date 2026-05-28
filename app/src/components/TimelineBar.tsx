@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 export interface TimelineBarProps {
   events: { id: number; label: string }[];
   highlightedEra: number;
+  carouselProgress?: number; // 0=overview, 1=era0, 2=era1… — drives continuous opacity in events mode
   isPlaying: boolean;
   dates: string[];
   eraIndices: number[];      // start index in dates[] for each era
@@ -28,6 +29,7 @@ const ERA_DISPLAY = [
 export default function TimelineBar({
   events,
   highlightedEra,
+  carouselProgress,
   isPlaying,
   dates,
   eraIndices,
@@ -204,6 +206,15 @@ export default function TimelineBar({
         <div className="flex items-stretch px-8 pt-3 pb-3">
           {events.map((event, i) => {
             const era = ERA_DISPLAY[event.id];
+            // Continuous opacity: interpolate based on fractional scroll position
+            // carouselProgress: 0=overview, 1=era0, 2=era1…  → eraFrac = progress-1
+            const opacity = carouselProgress !== undefined
+              ? (() => {
+                  const eraFrac = carouselProgress - 1;
+                  if (eraFrac <= -0.5) return 0.35; // overview
+                  return Math.max(0.35, 1 - Math.abs(event.id - eraFrac));
+                })()
+              : (highlightedEra === event.id ? 1 : 0.35);
             const isActive = highlightedEra === event.id;
             return (
               <div key={event.id} className="flex items-stretch flex-1">
@@ -215,8 +226,8 @@ export default function TimelineBar({
                 )}
                 <button
                   onClick={() => onEventClick(event.id)}
-                  className="flex flex-col items-start gap-0.5 text-left relative flex-1 transition-opacity hover:opacity-90"
-                  style={{ opacity: isActive ? 1 : 0.35 }}
+                  className="flex flex-col items-start gap-0.5 text-left relative flex-1 hover:opacity-90"
+                  style={{ opacity }}
                 >
                   {isActive && (
                     <span className="absolute -top-[13px] left-0 right-0 h-[2px]" style={{ background: '#ecf2ff' }} />
