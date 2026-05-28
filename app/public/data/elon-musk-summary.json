@@ -1,0 +1,308 @@
+{
+  "opinion_changers": [
+    {
+      "iso": "LBY",
+      "early": 0.31,
+      "late": -1.6,
+      "delta": -1.91,
+      "direction": "worsened"
+    },
+    {
+      "iso": "JAM",
+      "early": -0.53,
+      "late": -2.4,
+      "delta": -1.87,
+      "direction": "worsened"
+    },
+    {
+      "iso": "FSM",
+      "early": -0.26,
+      "late": -1.94,
+      "delta": -1.68,
+      "direction": "worsened"
+    },
+    {
+      "iso": "SRB",
+      "early": 0.85,
+      "late": -0.78,
+      "delta": -1.63,
+      "direction": "worsened"
+    },
+    {
+      "iso": "BRN",
+      "early": -0.05,
+      "late": -1.43,
+      "delta": -1.39,
+      "direction": "worsened"
+    },
+    {
+      "iso": "COL",
+      "early": 0.25,
+      "late": -1.12,
+      "delta": -1.37,
+      "direction": "worsened"
+    },
+    {
+      "iso": "NLD",
+      "early": -0.1,
+      "late": -1.45,
+      "delta": -1.35,
+      "direction": "worsened"
+    },
+    {
+      "iso": "CHN",
+      "early": 0.74,
+      "late": -0.6,
+      "delta": -1.34,
+      "direction": "worsened"
+    },
+    {
+      "iso": "XKX",
+      "early": 0.95,
+      "late": -0.37,
+      "delta": -1.32,
+      "direction": "worsened"
+    },
+    {
+      "iso": "SAU",
+      "early": -0.31,
+      "late": -1.55,
+      "delta": -1.24,
+      "direction": "worsened"
+    },
+    {
+      "iso": "ISL",
+      "early": -2.1,
+      "late": -0.89,
+      "delta": 1.21,
+      "direction": "improved"
+    },
+    {
+      "iso": "KHM",
+      "early": -1.46,
+      "late": -0.93,
+      "delta": 0.52,
+      "direction": "improved"
+    },
+    {
+      "iso": "LKA",
+      "early": -1.34,
+      "late": -0.93,
+      "delta": 0.4,
+      "direction": "improved"
+    },
+    {
+      "iso": "ALB",
+      "early": -1.03,
+      "late": -0.92,
+      "delta": 0.11,
+      "direction": "improved"
+    },
+    {
+      "iso": "MLT",
+      "early": -0.7,
+      "late": -0.67,
+      "delta": 0.03,
+      "direction": "improved"
+    },
+    {
+      "iso": "ARG",
+      "early": -0.66,
+      "late": -0.8,
+      "delta": -0.14,
+      "direction": "improved"
+    },
+    {
+      "iso": "HND",
+      "early": -1.01,
+      "late": -1.16,
+      "delta": -0.15,
+      "direction": "improved"
+    },
+    {
+      "iso": "LUX",
+      "early": -1.3,
+      "late": -1.54,
+      "delta": -0.24,
+      "direction": "improved"
+    },
+    {
+      "iso": "NGA",
+      "early": -0.53,
+      "late": -0.82,
+      "delta": -0.3,
+      "direction": "improved"
+    },
+    {
+      "iso": "OMN",
+      "early": -0.31,
+      "late": -0.69,
+      "delta": -0.37,
+      "direction": "improved"
+    }
+  ],
+  "pos_neg": {
+    "most_positive": [
+      {
+        "iso": "VNM",
+        "tone": 0.14,
+        "articles": 22265
+      },
+      {
+        "iso": "EST",
+        "tone": -0.13,
+        "articles": 958
+      },
+      {
+        "iso": "CHN",
+        "tone": -0.17,
+        "articles": 2932
+      },
+      {
+        "iso": "XKX",
+        "tone": -0.25,
+        "articles": 783
+      },
+      {
+        "iso": "MKD",
+        "tone": -0.36,
+        "articles": 569
+      },
+      {
+        "iso": "SRB",
+        "tone": -0.43,
+        "articles": 291
+      },
+      {
+        "iso": "PRT",
+        "tone": -0.51,
+        "articles": 3398
+      },
+      {
+        "iso": "ITA",
+        "tone": -0.54,
+        "articles": 16784
+      },
+      {
+        "iso": "OMN",
+        "tone": -0.58,
+        "articles": 224
+      },
+      {
+        "iso": "TUR",
+        "tone": -0.6,
+        "articles": 11068
+      }
+    ],
+    "most_negative": [
+      {
+        "iso": "IRN",
+        "tone": -2.21,
+        "articles": 489
+      },
+      {
+        "iso": "QAT",
+        "tone": -2.19,
+        "articles": 1282
+      },
+      {
+        "iso": "JAM",
+        "tone": -2.13,
+        "articles": 551
+      },
+      {
+        "iso": "MCO",
+        "tone": -1.94,
+        "articles": 128
+      },
+      {
+        "iso": "UKR",
+        "tone": -1.84,
+        "articles": 505
+      },
+      {
+        "iso": "AUT",
+        "tone": -1.75,
+        "articles": 3178
+      },
+      {
+        "iso": "IRL",
+        "tone": -1.74,
+        "articles": 10033
+      },
+      {
+        "iso": "LBN",
+        "tone": -1.72,
+        "articles": 1074
+      },
+      {
+        "iso": "FSM",
+        "tone": -1.63,
+        "articles": 1365
+      },
+      {
+        "iso": "UGA",
+        "tone": -1.63,
+        "articles": 172
+      }
+    ]
+  },
+  "era_countries": [
+    {
+      "most_negative": {
+        "iso": "ISL",
+        "tone": -2.54
+      },
+      "most_positive": {
+        "iso": "ALB",
+        "tone": 1.42
+      }
+    },
+    {
+      "most_negative": {
+        "iso": "ALB",
+        "tone": -2.42
+      },
+      "most_positive": {
+        "iso": "CHN",
+        "tone": 1.05
+      }
+    },
+    {
+      "most_negative": {
+        "iso": "CYP",
+        "tone": -1.7
+      },
+      "most_positive": {
+        "iso": "UGA",
+        "tone": 0.69
+      }
+    },
+    {
+      "most_negative": {
+        "iso": "UGA",
+        "tone": -2.95
+      },
+      "most_positive": {
+        "iso": "XKX",
+        "tone": 0.12
+      }
+    },
+    {
+      "most_negative": {
+        "iso": "JAM",
+        "tone": -2.59
+      },
+      "most_positive": {
+        "iso": "VNM",
+        "tone": -0.09
+      }
+    }
+  ],
+  "headline": {
+    "total_articles": 921348,
+    "countries": 157,
+    "avg_tone": -1.2,
+    "date_range": "2015-02-25 to 2026-05-20"
+  }
+}

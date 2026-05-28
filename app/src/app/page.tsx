@@ -13,11 +13,11 @@ const TOPIC_FILE = 'elon-musk-2015-01-2026-05';
 const SMOOTH_WINDOW = 30; // days to average for smoother map transitions
 
 const EVENTS = [
-  { id: 0, label: 'EVENT1' },
-  { id: 1, label: 'EVENT2' },
-  { id: 2, label: 'EVENT3' },
-  { id: 3, label: 'EVENT4' },
-  { id: 4, label: 'EVENT5' },
+  { id: 0, label: 'the Visionary' },
+  { id: 1, label: 'the Fractures' },
+  { id: 2, label: 'the Recovery' },
+  { id: 3, label: 'the Second Downfall' },
+  { id: 4, label: 'the Political Figure' },
 ];
 
 const ERA_BOUNDARIES = [

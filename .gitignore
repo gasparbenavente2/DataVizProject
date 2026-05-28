@@ -17,3 +17,4 @@ __pycache__/
 *.parquet
 !app/public/data/*.parquet
 *.csv
+!app/public/data/*.json

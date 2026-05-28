@@ -3,10 +3,10 @@
 const BG = '#00021a';
 
 const STATS = [
-  { label: 'Articles analyzed', value: '102,936', since: '2015', negative: false },
-  { label: 'Countries covering', value: '156', since: '2015', negative: false },
+  { label: 'Articles analyzed', value: '921,348', since: '2015', negative: false },
+  { label: 'Countries covering', value: '157', since: '2015', negative: false },
   { label: 'Most referred to as', value: 'Innovator', since: '2015', negative: false },
-  { label: 'Average tone', value: '−0.78', since: '2015', negative: true },
+  { label: 'Average tone', value: '−1.20', since: '2015', negative: true },
 ];
 
 export default function SectionLanding() {

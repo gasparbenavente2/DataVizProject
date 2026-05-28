@@ -1,12 +1,40 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+interface OpinionChanger {
+  iso: string;
+  early: number;
+  late: number;
+  delta: number;
+  direction: string;
+}
+
+interface PosNegCountry {
+  iso: string;
+  tone: number;
+  articles: number;
+}
+
+interface SummaryData {
+  opinion_changers: OpinionChanger[];
+  pos_neg: {
+    most_positive: PosNegCountry[];
+    most_negative: PosNegCountry[];
+  };
+  headline: {
+    total_articles: number;
+    countries: number;
+    avg_tone: number;
+    date_range: string;
+  };
+}
 
 const CARDS = [
   {
     id: 0,
     title: 'Which countries changed their opinion the most?',
-    detail: null,
+    detail: 'changers',
   },
   {
     id: 1,
@@ -16,7 +44,7 @@ const CARDS = [
   {
     id: 2,
     title: 'Most negative VS most positive countries',
-    detail: null,
+    detail: 'posneg',
   },
   {
     id: 3,
@@ -45,7 +73,16 @@ const ARTICLES = [
 ];
 
 export default function SectionSummary() {
-  const [selected, setSelected] = useState(3); // articles card open by default
+  const [selected, setSelected] = useState(0);
+  const [summary, setSummary] = useState<SummaryData | null>(null);
+
+  useEffect(() => {
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+    fetch(`${basePath}/data/elon-musk-summary.json`)
+      .then((r) => r.json())
+      .then((d: SummaryData) => setSummary(d))
+      .catch(console.error);
+  }, []);
 
   const activeCard = CARDS[selected];
 
@@ -64,17 +101,12 @@ export default function SectionSummary() {
         </p>
       </div>
 
-      {/* Two-column layout: small cards | detail panel */}
+      {/* Two-column layout */}
       <div className="flex-1 flex gap-6 min-h-0">
-
-        {/* Left: 4 small cards in a 2×2 grid */}
+        {/* Left: 4 small cards in 2×2 grid */}
         <div
           className="grid gap-3"
-          style={{
-            width: '45%',
-            gridTemplateColumns: '1fr 1fr',
-            gridTemplateRows: '1fr 1fr',
-          }}
+          style={{ width: '45%', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr' }}
         >
           {CARDS.map((card) => {
             const isSelected = selected === card.id;
@@ -89,13 +121,9 @@ export default function SectionSummary() {
                     ? 'linear-gradient(rgba(236,242,255,0.05), rgba(236,242,255,0.05)) padding-box, linear-gradient(135deg, #ecf2ff44, #ecf2ff99) border-box'
                     : 'linear-gradient(#060e28, #060e28) padding-box, linear-gradient(135deg, #24355f, #7683a6) border-box',
                   transform: isSelected ? 'scale(1.02)' : 'scale(1)',
-                  // Last card spans 2 columns
                 }}
               >
-                <p
-                  className="text-sm leading-snug"
-                  style={{ color: isSelected ? '#ecf2ff' : '#7683a6' }}
-                >
+                <p className="text-sm leading-snug" style={{ color: isSelected ? '#ecf2ff' : '#7683a6' }}>
                   {card.title}
                 </p>
               </button>
@@ -103,12 +131,11 @@ export default function SectionSummary() {
           })}
         </div>
 
-        {/* Right: Detail panel — animates on card change */}
+        {/* Right: Detail panel */}
         <div
           className="flex-1 rounded-2xl p-8 flex flex-col min-h-0"
           style={{ border: '2px solid transparent', background: 'linear-gradient(#060e28, #060e28) padding-box, linear-gradient(135deg, #24355f, #7683a6) border-box' }}
         >
-          {/* Animated content wrapper — key change triggers CSS animation */}
           <div
             key={selected}
             style={{ animation: 'fadeSlideIn 250ms ease forwards', flex: 1, display: 'flex', flexDirection: 'column' }}
@@ -117,43 +144,107 @@ export default function SectionSummary() {
               {activeCard.title}
             </p>
 
-            {activeCard.detail === 'articles' ? (
-              /* Articles card */
+            {activeCard.detail === 'changers' && summary ? (
+              <div className="flex-1 flex gap-8 min-h-0 overflow-auto">
+                {/* Worsened */}
+                <div className="flex-1">
+                  <p className="text-xs font-medium mb-3" style={{ color: '#ef4444' }}>Most worsened (2015–2020 → 2021–2026)</p>
+                  <div className="flex flex-col gap-2">
+                    {summary.opinion_changers.filter(c => c.direction === 'worsened').slice(0, 8).map((c) => (
+                      <div key={c.iso} className="flex items-center justify-between">
+                        <span className="text-sm" style={{ color: '#ecf2ff' }}>{c.iso}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.early >= 0 ? '+' : ''}{c.early.toFixed(1)}</span>
+                          <span className="text-xs" style={{ color: '#7683a6' }}>→</span>
+                          <span className="text-xs tabular-nums" style={{ color: '#ef4444' }}>{c.late.toFixed(1)}</span>
+                          <span className="text-xs font-medium tabular-nums w-12 text-right" style={{ color: '#ef4444' }}>{c.delta.toFixed(1)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Improved */}
+                <div className="flex-1">
+                  <p className="text-xs font-medium mb-3" style={{ color: '#22c55e' }}>Most improved</p>
+                  <div className="flex flex-col gap-2">
+                    {summary.opinion_changers.filter(c => c.direction === 'improved').slice(0, 8).map((c) => (
+                      <div key={c.iso} className="flex items-center justify-between">
+                        <span className="text-sm" style={{ color: '#ecf2ff' }}>{c.iso}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.early.toFixed(1)}</span>
+                          <span className="text-xs" style={{ color: '#7683a6' }}>→</span>
+                          <span className="text-xs tabular-nums" style={{ color: c.delta > 0 ? '#22c55e' : '#ef4444' }}>{c.late.toFixed(1)}</span>
+                          <span className="text-xs font-medium tabular-nums w-12 text-right" style={{ color: c.delta > 0 ? '#22c55e' : '#ef4444' }}>{c.delta > 0 ? '+' : ''}{c.delta.toFixed(1)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : activeCard.detail === 'posneg' && summary ? (
+              <div className="flex-1 flex gap-8 min-h-0 overflow-auto">
+                {/* Most positive */}
+                <div className="flex-1">
+                  <p className="text-xs font-medium mb-3" style={{ color: '#22c55e' }}>Most positive countries</p>
+                  <div className="flex flex-col gap-2">
+                    {summary.pos_neg.most_positive.map((c, i) => (
+                      <div key={c.iso} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs w-4 text-right" style={{ color: '#7683a6' }}>{i + 1}</span>
+                          <span className="text-sm" style={{ color: '#ecf2ff' }}>{c.iso}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="h-1 rounded-full" style={{ width: `${Math.max(8, Math.abs(c.tone) * 40)}px`, background: c.tone >= 0 ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.4)' }} />
+                          <span className="text-sm font-medium tabular-nums w-12 text-right" style={{ color: c.tone >= 0 ? '#22c55e' : '#ef4444' }}>
+                            {c.tone >= 0 ? '+' : ''}{c.tone.toFixed(2)}
+                          </span>
+                          <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.articles.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {/* Most negative */}
+                <div className="flex-1">
+                  <p className="text-xs font-medium mb-3" style={{ color: '#ef4444' }}>Most negative countries</p>
+                  <div className="flex flex-col gap-2">
+                    {summary.pos_neg.most_negative.map((c, i) => (
+                      <div key={c.iso} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs w-4 text-right" style={{ color: '#7683a6' }}>{i + 1}</span>
+                          <span className="text-sm" style={{ color: '#ecf2ff' }}>{c.iso}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="h-1 rounded-full" style={{ width: `${Math.max(8, Math.abs(c.tone) * 20)}px`, background: 'rgba(239,68,68,0.6)' }} />
+                          <span className="text-sm font-medium tabular-nums w-12 text-right" style={{ color: '#ef4444' }}>
+                            {c.tone.toFixed(2)}
+                          </span>
+                          <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.articles.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : activeCard.detail === 'articles' ? (
               <div className="flex flex-col gap-6">
                 {ARTICLES.map((a, i) => (
                   <div key={i}>
-                    {i > 0 && (
-                      <div
-                        className="mb-6"
-                        style={{ height: '1px', background: 'rgba(118,131,166,0.15)' }}
-                      />
-                    )}
+                    {i > 0 && <div className="mb-6" style={{ height: '1px', background: 'rgba(118,131,166,0.15)' }} />}
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm" style={{ color: '#7683a6' }}>
-                        {a.source} · {a.date}, {a.iso}
-                      </span>
-                      <span
-                        className="text-sm font-medium"
-                        style={{ color: a.negative ? '#ef4444' : '#22c55e' }}
-                      >
-                        {a.sentiment}
-                      </span>
+                      <span className="text-sm" style={{ color: '#7683a6' }}>{a.source} · {a.date}, {a.iso}</span>
+                      <span className="text-sm font-medium" style={{ color: a.negative ? '#ef4444' : '#22c55e' }}>{a.sentiment}</span>
                     </div>
-                    <p className="text-2xl font-bold leading-snug" style={{ color: '#ecf2ff' }}>
-                      {a.headline}
-                    </p>
+                    <p className="text-2xl font-bold leading-snug" style={{ color: '#ecf2ff' }}>{a.headline}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              /* Placeholder for other cards */
               <div
                 className="flex-1 rounded-xl flex items-center justify-center"
                 style={{ border: '1px solid rgba(118,131,166,0.12)', background: 'rgba(118,131,166,0.04)' }}
               >
-                <span className="text-sm" style={{ color: 'rgba(118,131,166,0.4)' }}>
-                  visualization placeholder
-                </span>
+                <span className="text-sm" style={{ color: 'rgba(118,131,166,0.4)' }}>visualization placeholder</span>
               </div>
             )}
           </div>

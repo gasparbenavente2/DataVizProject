@@ -73,3 +73,33 @@ export async function getSentimentByDate(date: string, file: string): Promise<Se
   const { byDate } = await loadFile(file)
   return byDate.get(date) ?? []
 }
+
+export interface TimelineRow {
+  date: string
+  avg_tone: number
+  article_count: number
+}
+
+export async function getGlobalTimeline(file: string): Promise<TimelineRow[]> {
+  const { dates, byDate } = await loadFile(file)
+  const timeline: TimelineRow[] = []
+  for (const date of dates) {
+    const rows = byDate.get(date) ?? []
+    let weightedSum = 0
+    let totalCount = 0
+    for (const row of rows) {
+      if (row.avg_tone !== null && row.article_count > 0) {
+        weightedSum += row.avg_tone * row.article_count
+        totalCount += row.article_count
+      }
+    }
+    if (totalCount > 0) {
+      timeline.push({
+        date,
+        avg_tone: weightedSum / totalCount,
+        article_count: totalCount,
+      })
+    }
+  }
+  return timeline
+}
