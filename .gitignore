@@ -3,6 +3,7 @@ data-pipeline/.env
 data-pipeline/output/
 .claude/
 __pycache__/
+.DS_Store
 
 # Exclude credentials and GCP keys (any .json not explicitly allowed below)
 *.json
@@ -10,7 +11,6 @@ __pycache__/
 !app/package-lock.json
 !app/tsconfig.json
 !app/public/world-110m.geojson
-!vercel.json
 
 # Pipeline output parquets stay out of git (large/binary)
 # but app/public/data/ parquets are committed so teammates get the data

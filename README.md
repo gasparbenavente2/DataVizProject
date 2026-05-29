@@ -8,13 +8,28 @@
 
 [Milestone 1](#milestone-1) • [Milestone 2](<Milestones/Milestone 2 - Perspectiva.pdf>) • [Milestone 3](#milestone-3)
 
-## Current Working Demo:
-https://data-viz-project-lovat.vercel.app
+## Live Demo
 
-## Video Link:
+**https://data-viz-project-lovat.vercel.app**
+
+## Video
+
 https://youtu.be/tapD4I7Awr8
 
-## Milestone 1 (20th March, 5pm)
+---
+
+## Tech Stack
+
+| Layer | Tools |
+|---|---|
+| Frontend | Next.js · TypeScript · Tailwind · MapLibre GL · Recharts · d3-cloud |
+| Data layer | DuckDB (Node.js) reading parquet files |
+| Data pipeline | Python · Google BigQuery (GDELT source) |
+| Deployment | Vercel |
+
+---
+
+## Milestone 1
 
 ### Dataset
 
@@ -43,7 +58,7 @@ representative outlets.
 ### Problematic
 
 **Motivation**  
-This visualization is grounded in the idea that the version of reality that news media constructs is rearily neutral or universal. The world is interconnected, but the news is localized, filtered and shaped by economic interests, political alliances, history, and perceived consequences of events. This leaves people with different understandings of the same reality. This visualization aims to make those differences visible.
+This visualization is grounded in the idea that the version of reality that news media constructs is rarely neutral or universal. The world is interconnected, but the news is localized, filtered and shaped by economic interests, political alliances, history, and perceived consequences of events. This leaves people with different understandings of the same reality. This visualization aims to make those differences visible.
 
 **Main Goal & Overview**  
 Our visualization explores how specific events and topics are reported, covered, and framed differently across the world and over time. Based on the GDELT dataset, an archive of online newspaper data, and AI sentiment analysis, it surfaces how the same moments in history have been portrayed differently depending on location, and how these portrayals have changed through time.
@@ -102,10 +117,10 @@ Please find the pdf at : Milestones/Milestone 2 - Perspectiva.pdf
 ## Milestone 3 (29th May, 5pm)
 
 **80% of the final grade**
+
 Please find the pdf at : Milestones/Process Book - Perspectiva.pdf
 
 ## Late policy
 
 - < 24h: 80% of the grade for the milestone
 - < 48h: 70% of the grade for the milestone
-
