@@ -4,6 +4,7 @@ data-pipeline/output/
 .claude/
 __pycache__/
 .DS_Store
+*.ipynb
 
 # Exclude credentials and GCP keys (any .json not explicitly allowed below)
 *.json
