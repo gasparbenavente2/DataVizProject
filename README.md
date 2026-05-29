@@ -102,7 +102,7 @@ Please find the pdf at : Milestones/Milestone 2 - Perspectiva.pdf
 ## Milestone 3 (29th May, 5pm)
 
 **80% of the final grade**
-
+Please find the pdf at : Milestones/Process Book - Perspectiva.pdf
 
 ## Late policy
 
