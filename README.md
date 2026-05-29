@@ -11,6 +11,9 @@
 ## Current Working Demo:
 https://data-viz-project-lovat.vercel.app
 
+## Video Link:
+https://youtu.be/tapD4I7Awr8
+
 ## Milestone 1 (20th March, 5pm)
 
 ### Dataset
