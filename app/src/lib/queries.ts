@@ -80,6 +80,58 @@ export interface TimelineRow {
   article_count: number
 }
 
+// Era cut points — must match ERA_BOUNDARIES in the app/pipeline.
+const ERA_BOUNDARIES = ['2015-01-01', '2018-01-01', '2020-01-01', '2022-01-01', '2023-01-01', '2027-01-01']
+const N_ERAS = ERA_BOUNDARIES.length - 1
+
+function eraOf(date: string): number {
+  let e = 0
+  for (let i = 0; i < N_ERAS; i++) if (date >= ERA_BOUNDARIES[i]) e = i
+  return e
+}
+
+export interface CountryStat {
+  country_iso3: string
+  avg_tone: number
+  article_count: number
+}
+
+// Per-era, per-country volume-weighted avg tone + total articles, sorted by volume.
+export async function getEraCountries(file: string): Promise<Record<number, CountryStat[]>> {
+  const { dates, byDate } = await loadFile(file)
+  const acc: Map<string, { w: number; c: number }>[] = Array.from({ length: N_ERAS }, () => new Map())
+  for (const date of dates) {
+    const m = acc[eraOf(date)]
+    for (const row of byDate.get(date) ?? []) {
+      if (row.avg_tone === null || row.article_count === 0) continue
+      const p = m.get(row.country_iso3) ?? { w: 0, c: 0 }
+      p.w += row.avg_tone * row.article_count
+      p.c += row.article_count
+      m.set(row.country_iso3, p)
+    }
+  }
+  const out: Record<number, CountryStat[]> = {}
+  for (let e = 0; e < N_ERAS; e++) {
+    out[e] = [...acc[e].entries()]
+      .map(([country_iso3, { w, c }]) => ({ country_iso3, avg_tone: w / c, article_count: c }))
+      .sort((a, b) => b.article_count - a.article_count)
+  }
+  return out
+}
+
+// Daily tone series for a single country.
+export async function getCountryTimeline(file: string, iso: string): Promise<TimelineRow[]> {
+  const { dates, byDate } = await loadFile(file)
+  const out: TimelineRow[] = []
+  for (const date of dates) {
+    const row = (byDate.get(date) ?? []).find((r) => r.country_iso3 === iso)
+    if (row && row.avg_tone !== null) {
+      out.push({ date, avg_tone: row.avg_tone, article_count: row.article_count })
+    }
+  }
+  return out
+}
+
 export async function getGlobalTimeline(file: string): Promise<TimelineRow[]> {
   const { dates, byDate } = await loadFile(file)
   const timeline: TimelineRow[] = []

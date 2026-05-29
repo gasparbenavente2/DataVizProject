@@ -16,7 +16,8 @@ from src.config import GCP_PROJECT_ID, OUTPUT_DIR
 from src.fetch import fetch
 from src.transform import transform
 from src.topics import aggregate_topics
-from src.export import export, export_topics
+from src.articles import extract_articles
+from src.export import export, export_topics, export_articles
 
 
 def main():
@@ -47,9 +48,13 @@ def main():
     topics = aggregate_topics(raw, keywords)
     topics_path = export_topics(topics, args.topic, OUTPUT_DIR)
 
+    articles = extract_articles(raw)
+    articles_path = export_articles(articles, args.topic, OUTPUT_DIR)
+
     print(f"\nDone.")
     print(f"  Sentiment: {path}")
     print(f"  Topics:    {topics_path}")
+    print(f"  Articles:  {articles_path}")
 
 
 if __name__ == "__main__":

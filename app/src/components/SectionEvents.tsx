@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState, memo } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -11,6 +11,19 @@ import {
   YAxis,
   Tooltip,
 } from 'recharts';
+import cloud from 'd3-cloud';
+import { useTopics, bucketToWords, type TopicBucket } from '@/lib/useTopics';
+import { useCountryNames } from '@/lib/useCountryNames';
+import { sentimentColor } from '@/lib/sentimentColor';
+
+const TOPIC_SLUG = 'elon-musk';
+const TOPIC_FILE = 'elon-musk-2015-01-2026-05'; // sentiment parquet for the API routes
+
+interface CountryStat {
+  country_iso3: string;
+  avg_tone: number;
+  article_count: number;
+}
 
 interface Event {
   id: number;
@@ -168,15 +181,6 @@ const ERA_FILLS = [
   'rgba(118,131,166,0.12)',
 ];
 
-// Per-era country extremes (pre-computed)
-const ERA_COUNTRY_EXTREMES = [
-  { neg: { iso: 'ISL', tone: -2.54 }, pos: { iso: 'ALB', tone: 1.42 } },
-  { neg: { iso: 'ALB', tone: -2.42 }, pos: { iso: 'CHN', tone: 1.05 } },
-  { neg: { iso: 'CYP', tone: -1.70 }, pos: { iso: 'UGA', tone: 0.69 } },
-  { neg: { iso: 'UGA', tone: -2.95 }, pos: { iso: 'XKX', tone: 0.12 } },
-  { neg: { iso: 'JAM', tone: -2.59 }, pos: { iso: 'VNM', tone: -0.09 } },
-];
-
 function smoothTimeline(data: TimelineRow[], window: number): TimelineRow[] {
   const result: TimelineRow[] = [];
   for (let i = 0; i < data.length; i++) {
@@ -197,91 +201,63 @@ function smoothTimeline(data: TimelineRow[], window: number): TimelineRow[] {
   return result;
 }
 
-// Sentiment word lists (shared by WordCloud)
-const NEG_WORDS = new Set(['fraud', 'crash', 'pedo', 'lawsuit', 'erratic', 'chaos', 'fired',
-  'hate speech', 'exodus', 'implosion', 'disinformation', 'far-right', 'extremism',
-  'salute', 'interference', 'layoffs', 'defiance', 'volatile', 'controversy', 'polarised',
-  'UK riots', 'cuts', 'oligarch']);
-const POS_WORDS = new Set(['innovation', 'visionary', 'launch', 'Crew Dragon', 'astronauts', 'NASA',
-  'S&P 500', 'trillion', 'Space', 'Mars', 'solar', 'richest', 'Starlink', 'disruption',
-  'free speech']);
+// Word cloud — d3-cloud layout (sprite-based collision detection, no overlaps).
+// Layout runs client-side in an effect, so it also avoids SSR hydration mismatches.
+interface PlacedWord { text: string; size: number; x: number; y: number; rotate: number; }
 
-// Word cloud component — spiral-placed, scattered layout
-function WordCloud({ words }: { words: { text: string; size: number }[] }) {
-  const r4 = (n: number) => Math.round(n * 10000) / 10000;
+const WordCloud = memo(function WordCloud({ words }: { words: { text: string; size: number }[] }) {
+  const W = 480, H = 320;
+  const [placed, setPlaced] = useState<PlacedWord[]>([]);
 
-  // Deterministic pseudo-random via sine hash
-  const hash = (n: number) => {
-    const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-    return x - Math.floor(x);
-  };
+  useEffect(() => {
+    if (words.length === 0) { setPlaced([]); return; }
+    let cancelled = false;
+    // Our incoming sizes are ~10–32; scale up to fill the layout box.
+    const fontFor = (s: number) => 13 + (s - 10) * 1.9;
+    const rotateFor = (text: string) => {
+      const h = [...text].reduce((a, c) => a + c.charCodeAt(0), 0);
+      return h % 5 === 0 ? 90 : 0; // ~20% vertical, deterministic per word
+    };
+    const layout = cloud<cloud.Word>()
+      .size([W, H])
+      .words(words.map((w) => ({ text: w.text, size: fontFor(w.size) })))
+      .padding(3)
+      .rotate((d) => rotateFor(d.text ?? ''))
+      .font('Inter, system-ui, sans-serif')
+      .fontSize((d) => d.size ?? 12)
+      .random(() => 0.5) // deterministic placement (stable across renders)
+      .on('end', (out) => { if (!cancelled) setPlaced(out as PlacedWord[]); });
+    layout.start();
+    return () => { cancelled = true; layout.stop(); };
+  }, [words]);
 
-  // Sort by size descending — largest words placed first (near center)
-  const sorted = [...words]
-    .map((w, i) => ({ ...w, idx: i }))
-    .sort((a, b) => b.size - a.size);
-
-  const placed = sorted.map((w, rank) => {
-    const h1 = hash(w.idx * 3 + 7);
-    const h2 = hash(w.idx * 5 + 13);
-    const h3 = hash(w.idx * 11 + 29);
-
-    // Golden-angle spiral from center with jitter
-    // sqrt growth pushes inner words apart more aggressively
-    const angle = rank * 2.3998 + h1 * 1.2;
-    const maxR = 42;
-    const r = Math.sqrt(rank / (sorted.length - 1 || 1)) * maxR + h2 * 4;
-
-    let x = 50 + Math.cos(angle) * r;
-    let y = 50 + Math.sin(angle) * r * 0.75;
-
-    // Clamp within bounds (leave room for rotated text)
-    x = r4(Math.max(12, Math.min(88, x)));
-    y = r4(Math.max(8, Math.min(92, y)));
-
-    // Rotate ~25% of words, but never the largest 2
-    const rotate = rank > 1 && rank % 4 === 2 ? 90 : rank > 3 && rank % 6 === 5 ? -90 : 0;
-
-    // Font size: non-linear scale so smallest words are still readable
-    // size range is 10-34 → fontSize range ~9px to ~28px
-    const fontSize = r4(5 + (w.size / 34) * 23);
-
-    return { ...w, x, y, rotate, fontSize };
-  });
+  const maxSize = Math.max(1, ...placed.map((p) => p.size));
 
   return (
-    <div className="relative w-full h-full overflow-hidden">
-      {placed.map((w) => {
-        const opacity = r4(0.35 + (w.size / 34) * 0.65);
-        const isNeg = NEG_WORDS.has(w.text);
-        const isPos = POS_WORDS.has(w.text);
-        const color = isNeg
-          ? `rgba(239,68,68,${opacity})`
-          : isPos
-            ? `rgba(34,197,94,${opacity})`
-            : `rgba(236,242,255,${opacity})`;
-        return (
-          <span
-            key={w.idx}
-            style={{
-              position: 'absolute',
-              left: `${w.x}%`,
-              top: `${w.y}%`,
-              transform: `translate(-50%, -50%) rotate(${w.rotate}deg)`,
-              fontSize: `${w.fontSize}px`,
-              color,
-              fontWeight: w.size > 18 ? 700 : 400,
-              lineHeight: 1,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {w.text}
-          </span>
-        );
-      })}
-    </div>
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full">
+      <g transform={`translate(${W / 2}, ${H / 2})`}>
+        {placed.map((w, i) => {
+          const opacity = 0.5 + (w.size / maxSize) * 0.5;
+          return (
+            <text
+              key={`${w.text}-${i}`}
+              textAnchor="middle"
+              transform={`translate(${w.x}, ${w.y}) rotate(${w.rotate})`}
+              style={{
+                fontSize: `${w.size}px`,
+                fontWeight: w.size > 34 ? 700 : 500,
+                fill: `rgba(236,242,255,${opacity})`,
+                fontFamily: 'Inter, system-ui, sans-serif',
+              }}
+            >
+              {w.text}
+            </text>
+          );
+        })}
+      </g>
+    </svg>
   );
-}
+});
 
 function EraSparkline({ timeline, eraIndex }: { timeline: TimelineRow[]; eraIndex: number }) {
   const start = ERA_BOUNDARIES[eraIndex];
@@ -343,6 +319,64 @@ export default function SectionEvents({ events, activeEvent, onEventChange, onSc
   const carouselRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [timeline, setTimeline] = useState<TimelineRow[]>([]);
+
+  const topics = useTopics(TOPIC_SLUG);
+  const names = useCountryNames();
+  // Per-era card: which country is selected in its "Globally ▾" dropdown ('' = global).
+  const [countrySel, setCountrySel] = useState<Record<number, string>>({});
+  const [openDropdown, setOpenDropdown] = useState<number | null>(null);
+
+  // Per-era, per-country sentiment stats (volume-ranked) from the parquet.
+  const [eraCountries, setEraCountries] = useState<Record<number, CountryStat[]>>({});
+  // Per-country daily timelines (smoothed), fetched on demand for the sparkline.
+  const [countryTimelines, setCountryTimelines] = useState<Record<string, TimelineRow[]>>({});
+
+  useEffect(() => {
+    fetch(`/api/sentiment/era-countries?file=${TOPIC_FILE}`)
+      .then((r) => r.json())
+      .then((d: { eras: Record<number, CountryStat[]> }) => setEraCountries(d.eras ?? {}))
+      .catch(console.error);
+  }, []);
+
+  // Top-8 countries per era — drives both the dropdown and the bottom country strip.
+  const topCountriesByEra = useMemo(() => {
+    const res: Record<number, string[]> = {};
+    for (let e = 0; e < ERAS.length; e++) {
+      res[e] = (eraCountries[e] ?? []).slice(0, 8).map((c) => c.country_iso3);
+    }
+    return res;
+  }, [eraCountries]);
+
+  // Fetch the timeline of any country currently selected in a dropdown.
+  useEffect(() => {
+    const isos = Object.values(countrySel).filter(Boolean) as string[];
+    isos.forEach((iso) => {
+      if (countryTimelines[iso]) return;
+      fetch(`/api/sentiment/country-timeline?file=${TOPIC_FILE}&iso=${iso}`)
+        .then((r) => r.json())
+        .then((d: { timeline: TimelineRow[] }) =>
+          setCountryTimelines((prev) => (prev[iso] ? prev : { ...prev, [iso]: smoothTimeline(d.timeline ?? [], 30) })),
+        )
+        .catch(console.error);
+    });
+  }, [countrySel, countryTimelines]);
+
+  // Word-cloud words per era (country-specific if selected). Memoized so the array
+  // references stay stable across scroll re-renders — otherwise d3-cloud relayouts
+  // every word cloud on every scroll frame, which makes sideways scrolling stutter.
+  const cloudWordsByEra = useMemo(() => {
+    const res: Record<number, { text: string; size: number }[]> = {};
+    for (let e = 0; e < ERAS.length; e++) {
+      let bucket: TopicBucket | null = null;
+      if (topics) {
+        const iso = countrySel[e];
+        bucket = (iso ? topics.byCountry[iso]?.[String(e)] : topics.global[String(e)]) ?? null;
+      }
+      const merged = bucketToWords(bucket);
+      res[e] = merged.length ? merged : ERAS[e].words;
+    }
+    return res;
+  }, [topics, countrySel]);
 
   // Fetch static JSON instead of API route
   useEffect(() => {
@@ -550,7 +584,25 @@ export default function SectionEvents({ events, activeEvent, onEventChange, onSc
 
         {/* ── Slides 1-5: Era cards ── */}
         {ERAS.map((era, i) => {
-          const extremes = ERA_COUNTRY_EXTREMES[i];
+          const cloudWords = cloudWordsByEra[i] ?? era.words;
+          const sel = countrySel[i] ?? '';
+          const top8 = topCountriesByEra[i] ?? [];
+
+          // Bottom strip: top-8 countries by volume, displayed most-negative → most-positive.
+          const eraStats = eraCountries[i] ?? [];
+          const top8Stats = [...eraStats.slice(0, 8)].sort((a, b) => a.avg_tone - b.avg_tone);
+          // Era extremes among meaningful-volume countries (avoids tiny-country noise).
+          const meaningful = eraStats.slice(0, 40);
+          const extremes =
+            meaningful.length > 0
+              ? {
+                  neg: meaningful.reduce((m, c) => (c.avg_tone < m.avg_tone ? c : m), meaningful[0]),
+                  pos: meaningful.reduce((m, c) => (c.avg_tone > m.avg_tone ? c : m), meaningful[0]),
+                }
+              : null;
+
+          // Left sparkline reflects the selected country (else global).
+          const sparkData = sel && countryTimelines[sel] ? countryTimelines[sel] : sparklineTimeline;
           return (
             <article key={i} className="snap-start shrink-0 h-full flex flex-col px-8 py-6 gap-4" style={{ width: '100vw' }}>
               <div className="flex-1 flex flex-col rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(118,131,166,0.2)', background: '#060e28' }}>
@@ -560,15 +612,36 @@ export default function SectionEvents({ events, activeEvent, onEventChange, onSc
                     <h2 className="text-4xl font-bold leading-tight" style={{ color: '#ecf2ff' }}>{era.name}</h2>
                     <span className="text-sm" style={{ color: '#7683a6' }}>{era.subtitle}</span>
                   </div>
-                  <button
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm"
-                    style={{ border: '1px solid rgba(118,131,166,0.3)', color: '#ecf2ff', background: 'rgba(118,131,166,0.08)' }}
-                  >
-                    Globally <span style={{ color: '#7683a6' }}>▾</span>
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => setOpenDropdown(openDropdown === i ? null : i)}
+                      disabled={top8.length === 0}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+                      style={{ border: '1px solid rgba(118,131,166,0.3)', color: '#ecf2ff', background: 'rgba(118,131,166,0.08)' }}
+                    >
+                      {sel ? (names[sel] ?? sel) : 'Globally'} <span style={{ color: '#7683a6' }}>▾</span>
+                    </button>
+                    {openDropdown === i && (
+                      <div
+                        className="absolute right-0 mt-1 z-20 rounded-lg overflow-hidden min-w-[180px]"
+                        style={{ border: '1px solid rgba(118,131,166,0.3)', background: '#0a1330' }}
+                      >
+                        {[''].concat(top8).map((iso) => (
+                          <button
+                            key={iso || 'global'}
+                            onClick={() => { setCountrySel((s) => ({ ...s, [i]: iso })); setOpenDropdown(null); }}
+                            className="block w-full text-left px-4 py-2 text-sm hover:bg-white/5"
+                            style={{ color: sel === iso ? '#ecf2ff' : '#7683a6' }}
+                          >
+                            {iso ? (names[iso] ?? iso) : 'Globally'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex-1 grid px-8 pb-6 gap-6 min-h-0" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                <div className="flex-1 grid px-8 pb-6 gap-6 min-h-0" style={{ gridTemplateColumns: '1fr 1.7fr' }}>
                   {/* Left: description + sparkline */}
                   <div className="flex flex-col gap-4 min-h-0">
                     <div>
@@ -580,8 +653,8 @@ export default function SectionEvents({ events, activeEvent, onEventChange, onSc
                         <span>Start of era</span><span>End of era</span>
                       </div>
                       <div className="h-14 rounded overflow-hidden" style={{ background: 'rgba(118,131,166,0.06)' }}>
-                        {sparklineTimeline.length > 0 ? (
-                          <EraSparkline timeline={sparklineTimeline} eraIndex={i} />
+                        {sparkData.length > 0 ? (
+                          <EraSparkline timeline={sparkData} eraIndex={i} />
                         ) : (
                           <div className="h-full flex items-center justify-center">
                             <span className="text-xs" style={{ color: 'rgba(118,131,166,0.35)' }}>loading...</span>
@@ -595,48 +668,63 @@ export default function SectionEvents({ events, activeEvent, onEventChange, onSc
                     </div>
                   </div>
 
-                  {/* Middle: word cloud */}
+                  {/* Middle: word cloud (organizations / entities) */}
                   <div className="flex flex-col gap-3 min-h-0">
-                    <p className="text-sm font-medium" style={{ color: '#ecf2ff' }}>Most used words to describe him</p>
+                    <p className="text-sm font-medium" style={{ color: '#ecf2ff' }}>
+                      What the coverage was about{sel ? ` · ${names[sel] ?? sel}` : ''}
+                    </p>
                     <div className="flex-1 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(118,131,166,0.15)', background: 'rgba(118,131,166,0.05)' }}>
-                      <WordCloud words={era.words} />
+                      <WordCloud words={cloudWords} />
                     </div>
-                  </div>
-
-                  {/* Right: topics */}
-                  <div className="flex flex-col gap-3 min-h-0">
-                    <p className="text-sm font-medium" style={{ color: '#ecf2ff' }}>Topics followed by biggest sentiment change:</p>
-                    <div className="flex flex-col gap-3">
-                      {era.topics.map((topic, ti) => (
-                        <div key={ti} className="flex items-center justify-between gap-3">
-                          <span className="text-sm" style={{ color: '#ecf2ff' }}>{topic.name}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="h-1 rounded-full" style={{ width: '80px', background: topic.positive ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)' }} />
-                            <span className="text-sm font-medium w-10 text-right" style={{ color: topic.positive ? '#22c55e' : '#ef4444' }}>{topic.delta}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-xs mt-auto text-right italic" style={{ color: '#7683a6' }}>in total: {era.articlesPerDay} articles per day</p>
                   </div>
                 </div>
               </div>
 
-              {/* Country sentiment strip — real data */}
+              {/* Country sentiment strip */}
               <div className="shrink-0 rounded-xl px-6 py-4" style={{ border: '1px solid rgba(118,131,166,0.15)', background: 'rgba(6,14,40,0.8)' }}>
-                <div className="flex items-center gap-3 justify-between h-16">
-                  <div className="flex flex-col shrink-0">
-                    <span className="text-xl font-bold" style={{ color: '#ef4444' }}>{extremes.neg.tone.toFixed(1)}</span>
-                    <span className="text-xs" style={{ color: '#7683a6' }}>Most negative · {extremes.neg.iso}</span>
+                <div className="flex items-start justify-between gap-8">
+                  {/* Left: highest-volume countries, painted by avg tone */}
+                  <div className="flex flex-col gap-2 min-w-0">
+                    <span className="text-[11px] uppercase tracking-wide" style={{ color: '#7683a6' }}>Highest Volume Countries</span>
+                    <div className="flex items-stretch gap-2 h-12">
+                      {top8Stats.length > 0 ? top8Stats.map((c) => {
+                        const active = sel === c.country_iso3;
+                        return (
+                          <button
+                            key={c.country_iso3}
+                            onClick={() => setCountrySel((s) => ({ ...s, [i]: active ? '' : c.country_iso3 }))}
+                            title={`${names[c.country_iso3] ?? c.country_iso3} · ${c.avg_tone >= 0 ? '+' : ''}${c.avg_tone.toFixed(2)}`}
+                            className="w-16 rounded flex flex-col items-center justify-center transition-all"
+                            style={{
+                              background: sentimentColor(c.avg_tone, 1),
+                              border: active ? '2px solid #ecf2ff' : '1px solid rgba(118,131,166,0.2)',
+                            }}
+                          >
+                            <span className="text-xs font-bold" style={{ color: '#ecf2ff' }}>{c.country_iso3}</span>
+                            <span className="text-[10px]" style={{ color: 'rgba(236,242,255,0.7)' }}>{c.avg_tone >= 0 ? '+' : ''}{c.avg_tone.toFixed(1)}</span>
+                          </button>
+                        );
+                      }) : (
+                        <span className="text-xs self-center" style={{ color: 'rgba(118,131,166,0.4)' }}>loading countries…</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex-1 flex items-center justify-center gap-2">
-                    {['#7f1d1d','#b91c1c','#ef4444','#fca5a5','#bbf7d0','#4ade80','#22c55e','#15803d'].map((c, ci) => (
-                      <div key={ci} className="rounded" style={{ width: '70px', height: '50px', background: c, opacity: 0.8 }} />
-                    ))}
-                  </div>
-                  <div className="flex flex-col items-end shrink-0">
-                    <span className="text-xl font-bold" style={{ color: extremes.pos.tone >= 0 ? '#22c55e' : '#ef4444' }}>{extremes.pos.tone >= 0 ? '+' : ''}{extremes.pos.tone.toFixed(1)}</span>
-                    <span className="text-xs" style={{ color: '#7683a6' }}>Most positive · {extremes.pos.iso}</span>
+
+                  {/* Right: strongest sentiment — most negative + most positive together */}
+                  <div className="flex flex-col gap-2 shrink-0 items-end">
+                    <span className="text-[11px] uppercase tracking-wide text-right" style={{ color: '#7683a6' }}>Strongest Sentiment Country</span>
+                    {extremes ? (
+                      <div className="flex items-center gap-6 h-12">
+                        <div className="flex flex-col items-end">
+                          <span className="text-xl font-bold" style={{ color: '#ef4444' }}>{extremes.neg.avg_tone.toFixed(1)}</span>
+                          <span className="text-xs" style={{ color: '#7683a6' }}>Most negative · {extremes.neg.country_iso3}</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-xl font-bold" style={{ color: extremes.pos.avg_tone >= 0 ? '#22c55e' : '#ef4444' }}>{extremes.pos.avg_tone >= 0 ? '+' : ''}{extremes.pos.avg_tone.toFixed(1)}</span>
+                          <span className="text-xs" style={{ color: '#7683a6' }}>Most positive · {extremes.pos.country_iso3}</span>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

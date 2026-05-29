@@ -1,7 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Cell } from 'recharts';
 import { useCountryNames } from '@/lib/useCountryNames';
+import { useTopics, bucketToWords } from '@/lib/useTopics';
+
+const TOPIC_SLUG = 'elon-musk';
 
 interface OpinionChanger {
   iso: string;
@@ -40,7 +44,7 @@ const CARDS = [
   {
     id: 1,
     title: 'Most used word per country',
-    detail: null,
+    detail: 'words',
   },
   {
     id: 2,
@@ -54,29 +58,57 @@ const CARDS = [
   },
 ];
 
-const ARTICLES = [
-  {
-    source: 'Indonesian Times',
-    date: '24. May 2026',
-    iso: 'IDN',
-    sentiment: '38% negative',
-    negative: true,
-    headline: "Musk's SpaceX Reveals its Finances for the First Time",
-  },
-  {
-    source: 'News of the SunShineCoast',
-    date: '24. May 2017',
-    iso: 'AUS',
-    sentiment: '89% positive',
-    negative: false,
-    headline: "Musk's Tesla project expected to cut gas use in half by 2020",
-  },
-];
+interface Article {
+  title: string;
+  source: string;
+  iso: string | null;
+  date: string;
+  tone: number | null;
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 export default function SectionSummary() {
   const [selected, setSelected] = useState(0);
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const names = useCountryNames();
+  const topics = useTopics(TOPIC_SLUG);
+  const [wordCountry, setWordCountry] = useState<string>('');
+  const [articles, setArticles] = useState<Article[]>([]);
+
+  useEffect(() => {
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+    fetch(`${basePath}/data/elon-musk-articles.json`)
+      .then((r) => r.json())
+      .then((d: Article[]) => setArticles(Array.isArray(d) ? d : []))
+      .catch(console.error);
+  }, []);
+
+  // Top countries by overall topic volume — the picker options for "words per country".
+  const wordCountries = useMemo(() => {
+    if (!topics) return [];
+    return Object.keys(topics.byCountry)
+      .map((iso) => ({
+        iso,
+        n: (topics.byCountry[iso]?.all?.orgs ?? []).reduce((a, x) => a + x.count, 0),
+      }))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 6)
+      .map((x) => x.iso);
+  }, [topics]);
+
+  const activeWordCountry = wordCountry || wordCountries[0] || '';
+  const wordData = useMemo(() => {
+    if (!topics || !activeWordCountry) return [];
+    // Same concept+company blend as the era word clouds, as a ranked bar list.
+    const bucket = topics.byCountry[activeWordCountry]?.all ?? null;
+    return bucketToWords(bucket, { total: 11 }).map((w) => ({ name: w.text, value: w.size }));
+  }, [topics, activeWordCountry]);
 
   useEffect(() => {
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -140,56 +172,60 @@ export default function SectionSummary() {
         >
           <div
             key={selected}
-            style={{ animation: 'fadeSlideIn 250ms ease forwards', flex: 1, display: 'flex', flexDirection: 'column' }}
+            style={{ animation: 'fadeSlideIn 250ms ease forwards', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}
           >
             <p className="text-sm font-medium mb-5" style={{ color: '#7683a6' }}>
               {activeCard.title}
             </p>
 
             {activeCard.detail === 'changers' && summary ? (
-              <div className="flex-1 flex flex-col min-h-0">
-                <p className="text-xs mb-4 leading-relaxed" style={{ color: '#7683a6' }}>
-                  Change in average tone from 2015–2020 to 2021–2026. Coverage trended negative
-                  overall, so the “improved” column is really <span style={{ color: '#ecf2ff' }}>least worsened</span> —
-                  few countries actually grew more positive.
-                </p>
-                <div className="flex-1 flex gap-8 min-h-0 overflow-auto">
-                  {/* Worsened */}
-                  <div className="flex-1">
-                    <p className="text-xs font-medium mb-3" style={{ color: '#ef4444' }}>Largest drop in tone</p>
-                    <div className="flex flex-col gap-2">
-                      {summary.opinion_changers.filter(c => c.direction === 'worsened').slice(0, 8).map((c) => (
-                        <div key={c.iso} className="flex items-center justify-between gap-2">
-                          <span className="text-sm truncate" style={{ color: '#ecf2ff' }} title={names[c.iso] ?? c.iso}>{names[c.iso] ?? c.iso}</span>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.early >= 0 ? '+' : ''}{c.early.toFixed(1)}</span>
-                            <span className="text-xs" style={{ color: '#7683a6' }}>→</span>
-                            <span className="text-xs tabular-nums" style={{ color: '#ef4444' }}>{c.late.toFixed(1)}</span>
-                            <span className="text-xs font-medium tabular-nums w-12 text-right" style={{ color: '#ef4444' }}>{c.delta.toFixed(1)}</span>
+              (() => {
+                const GRID = '1fr 2.8rem 1.1rem 2.8rem 4rem';
+                const GAP = '0.6rem';
+                const signed = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}`;
+                const Header = () => (
+                  <div className="grid items-center mb-2 text-[11px]" style={{ gridTemplateColumns: GRID, columnGap: GAP, color: '#7683a6' }}>
+                    <span />
+                    <span className="text-right">Before</span>
+                    <span />
+                    <span className="text-left">After</span>
+                    <span className="text-right">Difference</span>
+                  </div>
+                );
+                const Col = ({ title, color, dir }: { title: string; color: string; dir: string }) => (
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium mb-3" style={{ color }}>{title}</p>
+                    <Header />
+                    <div className="flex flex-col gap-2.5">
+                      {summary.opinion_changers.filter((c) => c.direction === dir).slice(0, 8).map((c) => {
+                        const diffColor = c.delta >= 0 ? '#22c55e' : '#ef4444';
+                        return (
+                          <div key={c.iso} className="grid items-center" style={{ gridTemplateColumns: GRID, columnGap: GAP }}>
+                            <span className="text-sm truncate pr-2" style={{ color: '#ecf2ff' }} title={names[c.iso] ?? c.iso}>{names[c.iso] ?? c.iso}</span>
+                            <span className="text-xs tabular-nums text-right" style={{ color: '#7683a6' }}>{signed(c.early)}</span>
+                            <span className="text-xs text-center" style={{ color: '#7683a6' }}>→</span>
+                            <span className="text-xs tabular-nums text-left" style={{ color: '#7683a6' }}>{signed(c.late)}</span>
+                            <span className="text-sm font-bold tabular-nums text-right" style={{ color: diffColor }}>{signed(c.delta)}</span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
-                  {/* Improved / least worsened */}
-                  <div className="flex-1">
-                    <p className="text-xs font-medium mb-3" style={{ color: '#22c55e' }}>Smallest drop / improved</p>
-                    <div className="flex flex-col gap-2">
-                      {summary.opinion_changers.filter(c => c.direction === 'improved').slice(0, 8).map((c) => (
-                        <div key={c.iso} className="flex items-center justify-between gap-2">
-                          <span className="text-sm truncate" style={{ color: '#ecf2ff' }} title={names[c.iso] ?? c.iso}>{names[c.iso] ?? c.iso}</span>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.early.toFixed(1)}</span>
-                            <span className="text-xs" style={{ color: '#7683a6' }}>→</span>
-                            <span className="text-xs tabular-nums" style={{ color: c.delta > 0 ? '#22c55e' : '#ef4444' }}>{c.late.toFixed(1)}</span>
-                            <span className="text-xs font-medium tabular-nums w-12 text-right" style={{ color: c.delta > 0 ? '#22c55e' : '#ef4444' }}>{c.delta > 0 ? '+' : ''}{c.delta.toFixed(1)}</span>
-                          </div>
-                        </div>
-                      ))}
+                );
+                return (
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <p className="text-xs mb-5 leading-relaxed" style={{ color: '#7683a6' }}>
+                      Total change in average tone from the first period (2015–2020) to the last period
+                      (2021–2026). Coverage trended negative overall, so the “improved” side really means
+                      <span style={{ color: '#ecf2ff' }}> least worsened</span> — only 5 countries actually grew more positive.
+                    </p>
+                    <div className="flex-1 flex gap-8 min-h-0 overflow-auto">
+                      <Col title="Largest drop in sentiment" color="#ef4444" dir="worsened" />
+                      <Col title="Largest improvement in sentiment" color="#22c55e" dir="improved" />
                     </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()
             ) : activeCard.detail === 'posneg' && summary ? (
               (() => {
                 // Shared bar scale across both columns so lengths are comparable.
@@ -244,17 +280,93 @@ export default function SectionSummary() {
                 );
               })()
             ) : activeCard.detail === 'articles' ? (
-              <div className="flex flex-col gap-6">
-                {ARTICLES.map((a, i) => (
-                  <div key={i}>
-                    {i > 0 && <div className="mb-6" style={{ height: '1px', background: 'rgba(118,131,166,0.15)' }} />}
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm" style={{ color: '#7683a6' }}>{a.source} · {a.date}, {a.iso}</span>
-                      <span className="text-sm font-medium" style={{ color: a.negative ? '#ef4444' : '#22c55e' }}>{a.sentiment}</span>
+              (() => {
+                const feed = articles.slice(0, 60);
+                if (feed.length === 0) {
+                  return (
+                    <div className="flex-1 flex items-center justify-center">
+                      <span className="text-sm" style={{ color: 'rgba(118,131,166,0.4)' }}>loading…</span>
                     </div>
-                    <p className="text-2xl font-bold leading-snug" style={{ color: '#ecf2ff' }}>{a.headline}</p>
+                  );
+                }
+                const dur = Math.max(24, feed.length * 0.9);
+                const Row = ({ a }: { a: Article }) => {
+                  const neg = (a.tone ?? 0) < 0;
+                  return (
+                    <div className="py-3" style={{ borderBottom: '1px solid rgba(118,131,166,0.12)' }}>
+                      <div className="flex items-center justify-between gap-3 mb-1">
+                        <span className="text-xs truncate" style={{ color: '#7683a6' }}>
+                          {a.source}{a.iso ? ` · ${names[a.iso] ?? a.iso}` : ''} · {fmtDate(a.date)}
+                        </span>
+                        {a.tone !== null && (
+                          <span className="text-xs font-medium tabular-nums shrink-0" style={{ color: neg ? '#ef4444' : '#22c55e' }}>
+                            {a.tone >= 0 ? '+' : ''}{a.tone.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-base font-bold leading-snug" style={{ color: '#ecf2ff' }}>{a.title}</p>
+                    </div>
+                  );
+                };
+                return (
+                  <div className="flex-1 min-h-0 overflow-hidden relative">
+                    <div className="news-marquee" style={{ animationDuration: `${dur}s` }}>
+                      {feed.map((a, i) => <Row key={`a${i}`} a={a} />)}
+                      {feed.map((a, i) => <Row key={`b${i}`} a={a} />)}
+                    </div>
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-8" style={{ background: 'linear-gradient(#060e28, rgba(6,14,40,0))' }} />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8" style={{ background: 'linear-gradient(rgba(6,14,40,0), #060e28)' }} />
                   </div>
-                ))}
+                );
+              })()
+            ) : activeCard.detail === 'words' ? (
+              <div className="flex-1 flex flex-col min-h-0">
+                {/* Country picker */}
+                <div className="flex flex-wrap gap-2 mb-5">
+                  {wordCountries.map((iso) => {
+                    const on = iso === activeWordCountry;
+                    return (
+                      <button
+                        key={iso}
+                        onClick={() => setWordCountry(iso)}
+                        className="px-3 py-1.5 rounded-lg text-xs transition-colors"
+                        style={{
+                          border: '1px solid rgba(118,131,166,0.3)',
+                          background: on ? '#ecf2ff' : 'rgba(118,131,166,0.08)',
+                          color: on ? '#00021a' : '#7683a6',
+                        }}
+                      >
+                        {names[iso] ?? iso}
+                      </button>
+                    );
+                  })}
+                </div>
+                {wordData.length > 0 ? (
+                  <div className="flex-1 min-h-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={wordData} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
+                        <XAxis type="number" hide />
+                        <YAxis
+                          type="category"
+                          dataKey="name"
+                          width={130}
+                          tick={{ fill: '#ecf2ff', fontSize: 12 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]} isAnimationActive={false}>
+                          {wordData.map((_, idx) => (
+                            <Cell key={idx} fill={`rgba(118,131,166,${0.85 - idx * 0.05})`} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center">
+                    <span className="text-sm" style={{ color: 'rgba(118,131,166,0.4)' }}>loading…</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div

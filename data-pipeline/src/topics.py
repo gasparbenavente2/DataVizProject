@@ -76,6 +76,7 @@ _THEME_STOP_LABELS = {
     "health", "science", "death", "wound", "manmade disaster", "general",
     "crisislex crisislexrec", "epu policy", "world", "natural disaster",
     "soc generalcrime", "general crime", "checkpoint", "movement general",
+    "manmade disaster implied", "services", "general services",
 }
 
 
@@ -134,32 +135,50 @@ def _org_stop(keywords: list[str]) -> set[str]:
     return stop
 
 
-def _explode_field(df: pl.DataFrame, col: str) -> pl.DataFrame:
-    """`name,offset;name,offset;…` → one row per (article, name), with `name` + `key`."""
-    return (
-        df.select(["era", "country_iso3", "DocumentIdentifier", col])
+def _collect_streaming(lf: pl.LazyFrame) -> pl.DataFrame:
+    """Collect a LazyFrame with the streaming engine (bounded memory), across polars versions."""
+    try:
+        return lf.collect(engine="streaming")
+    except TypeError:
+        return lf.collect(streaming=True)
+
+
+def _agg_signal(df: pl.DataFrame, col: str, clean) -> pl.DataFrame:
+    """Explode a `name,offset;…` column and aggregate to mention counts at the finest grain.
+
+    Returns a small DataFrame [country_iso3, era, key, name, count]. The 100M-row
+    explode is done lazily + streaming, so only the grouped result lands in memory.
+    `clean` takes the lazy frame (with a `raw` column) and returns it with `name`+`key`.
+    """
+    lf = (
+        df.lazy()
+        .select(["era", "country_iso3", col])
         .drop_nulls(col)
         .with_columns(pl.col(col).str.split(";"))
         .explode(col)
         .with_columns(pl.col(col).str.split(",").list.first().str.strip_chars().alias("raw"))
         .filter(pl.col("raw").str.len_chars() >= 1)
     )
+    lf = clean(lf)
+    agg = lf.group_by(["country_iso3", "era", "key"]).agg([
+        pl.len().alias("count"),
+        pl.col("name").first().alias("name"),
+    ])
+    return _collect_streaming(agg)
 
 
-def _top_per_group(frame: pl.DataFrame, group_cols: list[str]) -> pl.DataFrame:
-    counts = (
+def _topn(frame: pl.DataFrame, group_cols: list[str]) -> pl.DataFrame:
+    """Roll up the fine-grained counts to top-N per group (operates on the small frame)."""
+    g = (
         frame.group_by(group_cols + ["key"])
-        .agg([
-            pl.col("DocumentIdentifier").n_unique().alias("count"),
-            pl.col("name").first().alias("name"),
-        ])
+        .agg([pl.col("count").sum().alias("count"), pl.col("name").first().alias("name")])
         .sort("count", descending=True)
     )
     if group_cols:
-        counts = counts.group_by(group_cols, maintain_order=True).head(TOP_N)
+        g = g.group_by(group_cols, maintain_order=True).head(TOP_N)
     else:
-        counts = counts.head(TOP_N)
-    return counts
+        g = g.head(TOP_N)
+    return g
 
 
 def _rows_to_list(frame: pl.DataFrame) -> list[dict]:
@@ -169,11 +188,26 @@ def _rows_to_list(frame: pl.DataFrame) -> list[dict]:
     ]
 
 
-def _bucketize(frame: pl.DataFrame, group_cols: list[str]) -> dict:
-    """Return {bucket_key: list} for the 'all' + per-era buckets within a group frame."""
-    per_era = _top_per_group(frame, group_cols + ["era"])
-    overall = _top_per_group(frame, group_cols)
-    return per_era, overall
+def _blocks_from(agg: pl.DataFrame, signal: str, big: list[str], out_global: dict, out_country: dict):
+    """Populate global + per-country era buckets for one signal ('orgs' or 'themes')."""
+    eras = [str(i) for i in range(len(ERA_LABELS))]
+
+    # global
+    g_all = _topn(agg, [])
+    g_era = _topn(agg, ["era"])
+    out_global["all"][signal] = _rows_to_list(g_all)
+    for e in range(len(ERA_LABELS)):
+        out_global[str(e)][signal] = _rows_to_list(g_era.filter(pl.col("era") == e))
+
+    # per country (only the kept countries)
+    cn = agg.filter(pl.col("country_iso3").is_in(big))
+    c_all = _topn(cn, ["country_iso3"])
+    c_era = _topn(cn, ["country_iso3", "era"])
+    for iso in big:
+        out_country[iso]["all"][signal] = _rows_to_list(c_all.filter(pl.col("country_iso3") == iso))
+        sub = c_era.filter(pl.col("country_iso3") == iso)
+        for e in range(len(ERA_LABELS)):
+            out_country[iso][str(e)][signal] = _rows_to_list(sub.filter(pl.col("era") == e))
 
 
 def aggregate_topics(df: pl.DataFrame, keywords: list[str]) -> dict:
@@ -197,78 +231,35 @@ def aggregate_topics(df: pl.DataFrame, keywords: list[str]) -> dict:
     }
     df = df.with_columns(pl.col("SourceCommonName").replace(domain_map).alias("country_iso3"))
 
-    # Organizations: keep raw display form, key on lowercase, drop news outlets + keyword.
-    if have_org:
-        orgs = _explode_field(df, "V2Organizations").with_columns([
+    def clean_orgs(lf: pl.LazyFrame) -> pl.LazyFrame:
+        return lf.with_columns([
             pl.col("raw").alias("name"),
             pl.col("raw").str.to_lowercase().alias("key"),
-        ]).filter(
-            (pl.col("key").str.len_chars() >= 2) & (~pl.col("key").is_in(list(org_stop)))
-        )
-    else:
-        orgs = None
+        ]).filter((pl.col("key").str.len_chars() >= 2) & (~pl.col("key").is_in(list(org_stop))))
 
-    # Themes: clean each code to a readable label (vectorized).
-    themes = _clean_themes(_explode_field(df, "V2Themes")) if have_theme else None
+    org_agg = _agg_signal(df, "V2Organizations", clean_orgs) if have_org else None
+    theme_agg = _agg_signal(df, "V2Themes", _clean_themes) if have_theme else None
 
-    valid_country = pl.col("country_iso3").is_not_null() & (
-        pl.col("country_iso3").str.len_chars() == 3
-    )
-
-    def build_block(get_era_overall, era_filter=None):
-        """get_era_overall: (per_era_df, overall_df). Returns {'all':..,'0':..,..}."""
-        per_era, overall = get_era_overall
-        block = {"all": _rows_to_list(overall)}
-        for era_id in range(len(ERA_LABELS)):
-            block[str(era_id)] = _rows_to_list(per_era.filter(pl.col("era") == era_id))
-        return block
-
-    # ---- global ----
-    global_block: dict[str, dict] = {}
-    org_g = _bucketize(orgs, []) if orgs is not None else None
-    theme_g = _bucketize(themes, []) if themes is not None else None
-    for era_key in ["all"] + [str(i) for i in range(len(ERA_LABELS))]:
-        global_block[era_key] = {}
-    if org_g:
-        ob = build_block(org_g)
-        for k, v in ob.items():
-            global_block[k]["orgs"] = v
-    if theme_g:
-        tb = build_block(theme_g)
-        for k, v in tb.items():
-            global_block[k]["themes"] = v
-
-    # ---- per country ----
-    src = orgs if orgs is not None else themes
+    # Countries kept: enough total mentions, valid ISO3.
+    ref = org_agg if org_agg is not None else theme_agg
     big = (
-        src.filter(valid_country)
+        ref.filter(
+            pl.col("country_iso3").is_not_null() & (pl.col("country_iso3").str.len_chars() == 3)
+        )
         .group_by("country_iso3")
-        .agg(pl.len().alias("n"))
+        .agg(pl.col("count").sum().alias("n"))
         .filter(pl.col("n") >= MIN_COUNTRY_ARTICLES)["country_iso3"]
         .to_list()
     )
-    orgs_c = orgs.filter(pl.col("country_iso3").is_in(big)) if orgs is not None else None
-    themes_c = themes.filter(pl.col("country_iso3").is_in(big)) if themes is not None else None
 
-    org_country_era = _top_per_group(orgs_c, ["country_iso3", "era"]) if orgs_c is not None else None
-    org_country_all = _top_per_group(orgs_c, ["country_iso3"]) if orgs_c is not None else None
-    th_country_era = _top_per_group(themes_c, ["country_iso3", "era"]) if themes_c is not None else None
-    th_country_all = _top_per_group(themes_c, ["country_iso3"]) if themes_c is not None else None
+    bucket_keys = ["all"] + [str(i) for i in range(len(ERA_LABELS))]
+    global_block: dict[str, dict] = {k: {} for k in bucket_keys}
+    by_country: dict[str, dict] = {iso: {k: {} for k in bucket_keys} for iso in big}
 
-    by_country: dict[str, dict] = {}
-    for iso in big:
-        block = {k: {} for k in ["all"] + [str(i) for i in range(len(ERA_LABELS))]}
-        if org_country_all is not None:
-            block["all"]["orgs"] = _rows_to_list(org_country_all.filter(pl.col("country_iso3") == iso))
-            sub = org_country_era.filter(pl.col("country_iso3") == iso)
-            for era_id in range(len(ERA_LABELS)):
-                block[str(era_id)]["orgs"] = _rows_to_list(sub.filter(pl.col("era") == era_id))
-        if th_country_all is not None:
-            block["all"]["themes"] = _rows_to_list(th_country_all.filter(pl.col("country_iso3") == iso))
-            sub = th_country_era.filter(pl.col("country_iso3") == iso)
-            for era_id in range(len(ERA_LABELS)):
-                block[str(era_id)]["themes"] = _rows_to_list(sub.filter(pl.col("era") == era_id))
-        by_country[iso] = block
+    if org_agg is not None:
+        _blocks_from(org_agg, "orgs", big, global_block, by_country)
+    if theme_agg is not None:
+        _blocks_from(theme_agg, "themes", big, global_block, by_country)
 
     n_orgs = len(global_block["all"].get("orgs", []))
     n_themes = len(global_block["all"].get("themes", []))

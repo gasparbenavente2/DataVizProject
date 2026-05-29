@@ -41,6 +41,14 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Rolling news feed (vertical marquee) ── */
+@keyframes scrollUp {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-50%); }
+}
+.news-marquee { animation: scrollUp linear infinite; }
+.news-marquee:hover { animation-play-state: paused; }
+
 /* ── Range slider ── */
 input[type='range'] {
   -webkit-appearance: none;
