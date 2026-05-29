@@ -13,10 +13,14 @@ export interface TimelineBarProps {
   eraIndices: number[];      // start index in dates[] for each era
   currentDateIdx: number;
   showScrubber: boolean;
+  speed: number;
   onPlay: () => void;
+  onSpeedChange: (speed: number) => void;
   onDateChange: (idx: number) => void;
   onEventClick: (id: number) => void;
 }
+
+const SPEEDS = [1, 2, 5];
 
 const ERA_DISPLAY = [
   { start: '2015', end: '2018', name: 'the Visionary',        subtitle: 'tesla & spaceX era' },
@@ -35,7 +39,9 @@ export default function TimelineBar({
   eraIndices,
   currentDateIdx,
   showScrubber,
+  speed,
   onPlay,
+  onSpeedChange,
   onDateChange,
   onEventClick,
 }: TimelineBarProps) {
@@ -99,6 +105,27 @@ export default function TimelineBar({
           >
             {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
           </Button>
+
+          {/* Speed chips */}
+          <div className="shrink-0 flex gap-1 mt-1.5">
+            {SPEEDS.map((s) => {
+              const active = speed === s;
+              return (
+                <button
+                  key={s}
+                  onClick={() => onSpeedChange(s)}
+                  className="px-2 py-0.5 rounded-md text-[11px] font-medium tabular-nums transition-colors"
+                  style={{
+                    color: active ? '#00021a' : '#7683a6',
+                    background: active ? '#ecf2ff' : 'rgba(118,131,166,0.12)',
+                  }}
+                  aria-label={`${s}× speed`}
+                >
+                  {s}×
+                </button>
+              );
+            })}
+          </div>
 
           {/* Era buttons + cones + slider stacked */}
           <div className="flex-1 flex flex-col">

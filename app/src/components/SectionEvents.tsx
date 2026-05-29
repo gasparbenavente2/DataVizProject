@@ -159,12 +159,13 @@ const ERAS = [
   },
 ];
 
+// Alternating era bands — stronger contrast so the five eras are easy to tell apart.
 const ERA_FILLS = [
-  'rgba(118,131,166,0.04)',
-  'rgba(118,131,166,0.015)',
-  'rgba(118,131,166,0.04)',
-  'rgba(118,131,166,0.015)',
-  'rgba(118,131,166,0.04)',
+  'rgba(118,131,166,0.12)',
+  'rgba(118,131,166,0.02)',
+  'rgba(118,131,166,0.12)',
+  'rgba(118,131,166,0.02)',
+  'rgba(118,131,166,0.12)',
 ];
 
 // Per-era country extremes (pre-computed)
@@ -207,6 +208,8 @@ const POS_WORDS = new Set(['innovation', 'visionary', 'launch', 'Crew Dragon', '
 
 // Word cloud component — spiral-placed, scattered layout
 function WordCloud({ words }: { words: { text: string; size: number }[] }) {
+  const r4 = (n: number) => Math.round(n * 10000) / 10000;
+
   // Deterministic pseudo-random via sine hash
   const hash = (n: number) => {
     const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -233,15 +236,15 @@ function WordCloud({ words }: { words: { text: string; size: number }[] }) {
     let y = 50 + Math.sin(angle) * r * 0.75;
 
     // Clamp within bounds (leave room for rotated text)
-    x = Math.max(12, Math.min(88, x));
-    y = Math.max(8, Math.min(92, y));
+    x = r4(Math.max(12, Math.min(88, x)));
+    y = r4(Math.max(8, Math.min(92, y)));
 
     // Rotate ~25% of words, but never the largest 2
     const rotate = rank > 1 && rank % 4 === 2 ? 90 : rank > 3 && rank % 6 === 5 ? -90 : 0;
 
     // Font size: non-linear scale so smallest words are still readable
     // size range is 10-34 → fontSize range ~9px to ~28px
-    const fontSize = 5 + (w.size / 34) * 23;
+    const fontSize = r4(5 + (w.size / 34) * 23);
 
     return { ...w, x, y, rotate, fontSize };
   });
@@ -249,7 +252,7 @@ function WordCloud({ words }: { words: { text: string; size: number }[] }) {
   return (
     <div className="relative w-full h-full overflow-hidden">
       {placed.map((w) => {
-        const opacity = 0.35 + (w.size / 34) * 0.65;
+        const opacity = r4(0.35 + (w.size / 34) * 0.65);
         const isNeg = NEG_WORDS.has(w.text);
         const isPos = POS_WORDS.has(w.text);
         const color = isNeg
@@ -358,8 +361,27 @@ export default function SectionEvents({ events, activeEvent, onEventChange, onSc
   const chartData = useMemo(() => {
     if (smoothedTimeline.length === 0) return [];
     const step = Math.max(1, Math.floor(smoothedTimeline.length / 500));
-    return smoothedTimeline.filter((_, i) => i % step === 0);
+    const sampled = smoothedTimeline.filter((_, i) => i % step === 0);
+    // Linear-regression trend line over the sampled tone series.
+    const n = sampled.length;
+    let sx = 0, sy = 0, sxy = 0, sxx = 0;
+    sampled.forEach((d, i) => { sx += i; sy += d.avg_tone; sxy += i * d.avg_tone; sxx += i * i; });
+    const denom = n * sxx - sx * sx;
+    const slope = denom !== 0 ? (n * sxy - sx * sy) / denom : 0;
+    const intercept = (sy - slope * sx) / (n || 1);
+    return sampled.map((d, i) => ({ ...d, trend: intercept + slope * i }));
   }, [smoothedTimeline]);
+
+  // Where the y=0 line sits within the tone domain, as a 0..1 fraction from the top.
+  // Used to split the area fill into green (above 0) / red (below 0).
+  const zeroOffset = useMemo(() => {
+    if (chartData.length === 0) return 0.5;
+    const tones = chartData.map((d) => d.avg_tone);
+    const max = Math.max(...tones, 0);
+    const min = Math.min(...tones, 0);
+    const range = max - min || 1;
+    return max / range;
+  }, [chartData]);
 
   const sparklineTimeline = useMemo(() => {
     if (timeline.length === 0) return [];
@@ -447,6 +469,14 @@ export default function SectionEvents({ events, activeEvent, onEventChange, onSc
               <div className="absolute inset-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                    <defs>
+                      <linearGradient id="toneSplit" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stopColor="#22c55e" stopOpacity={0.35} />
+                        <stop offset={zeroOffset} stopColor="#22c55e" stopOpacity={0.08} />
+                        <stop offset={zeroOffset} stopColor="#ef4444" stopOpacity={0.08} />
+                        <stop offset="1" stopColor="#ef4444" stopOpacity={0.35} />
+                      </linearGradient>
+                    </defs>
                     <XAxis
                       dataKey="date"
                       tick={{ fill: '#7683a6', fontSize: 10 }}
@@ -465,12 +495,32 @@ export default function SectionEvents({ events, activeEvent, onEventChange, onSc
                     />
                     <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'rgba(118,131,166,0.3)' }} />
                     <ReferenceLine y={0} stroke="rgba(118,131,166,0.4)" strokeDasharray="4 4" />
+                    {/* Volume (muted, behind everything) */}
                     <Area
                       type="monotone"
                       dataKey="article_count"
                       yAxisId={1}
-                      fill="rgba(118,131,166,0.08)"
+                      fill="rgba(118,131,166,0.07)"
                       stroke="none"
+                      isAnimationActive={false}
+                    />
+                    {/* Two-tone fill: green above 0, red below 0 */}
+                    <Area
+                      type="monotone"
+                      dataKey="avg_tone"
+                      baseValue={0}
+                      fill="url(#toneSplit)"
+                      stroke="none"
+                      isAnimationActive={false}
+                    />
+                    {/* Long-term trend line */}
+                    <Line
+                      type="linear"
+                      dataKey="trend"
+                      stroke="#7683a6"
+                      strokeWidth={1}
+                      strokeDasharray="5 4"
+                      dot={false}
                       isAnimationActive={false}
                     />
                     <Line

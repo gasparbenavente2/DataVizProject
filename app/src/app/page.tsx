@@ -6,11 +6,16 @@ import SectionMap from '@/components/SectionMap';
 import SectionEvents from '@/components/SectionEvents';
 import SectionSummary from '@/components/SectionSummary';
 import TimelineBar from '@/components/TimelineBar';
-import WorldMap from '@/components/WorldMap';
+import dynamic from 'next/dynamic';
 import type { SentimentRow } from '@/types';
+import { sentimentColor, NO_COVERAGE } from '@/lib/sentimentColor';
+
+const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false });
 
 const TOPIC_FILE = 'elon-musk-2015-01-2026-05';
-const SMOOTH_WINDOW = 30; // days to average for smoother map transitions
+// Days to average for smoother map transitions. Wider at high speed so the map
+// doesn't strobe when many days fly by per tick.
+const smoothWindowFor = (speed: number) => (speed >= 5 ? 300 : 45);
 
 const EVENTS = [
   { id: 0, label: 'the Visionary' },
@@ -72,6 +77,8 @@ export default function Page() {
   const [carouselProgress, setCarouselProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showScrubber, setShowScrubber] = useState(true);
+  const [speed, setSpeed] = useState(1); // playback multiplier: 1×, 2×, 5×
+  const speedRef = useRef(1);
 
   const showScrubberRef = useRef(true);
   const didResetToOverviewRef = useRef(false);
@@ -79,6 +86,7 @@ export default function Page() {
   const timelineRef = useRef<HTMLDivElement>(null);
   const mapWrapperRef = useRef<HTMLDivElement>(null);
   const darkOverlayRef = useRef<HTMLDivElement>(null);
+  const mapHudRef = useRef<HTMLDivElement>(null);
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const eraIndicesRef = useRef<number[]>([]);
   const datesRef = useRef<string[]>([]);
@@ -92,6 +100,18 @@ export default function Page() {
     if (showScrubber) return getEraFromDate(currentDate);
     return activeEvent;
   }, [currentDate, showScrubber, activeEvent]);
+
+  // Volume-weighted global average tone for the current (rolling) frame.
+  const avgTone = useMemo(() => {
+    let weightedSum = 0;
+    let total = 0;
+    for (const r of countries) {
+      if (r.avg_tone === null || r.article_count === 0) continue;
+      weightedSum += r.avg_tone * r.article_count;
+      total += r.article_count;
+    }
+    return total > 0 ? weightedSum / total : null;
+  }, [countries]);
 
   useEffect(() => {
     fetch(`/api/sentiment/dates?file=${TOPIC_FILE}`)
@@ -111,9 +131,11 @@ export default function Page() {
   useEffect(() => {
     if (!currentDate) return;
 
-    // Detect jump (non-sequential) and clear the rolling buffer if so
+    // Detect a real jump (scrub / era click) and clear the rolling buffer if so.
+    // Threshold must exceed the largest playback step (3 days at 5×) so normal
+    // playback keeps accumulating the buffer instead of resetting every tick.
     const prev = prevDateIdxRef.current;
-    if (prev !== -1 && Math.abs(currentDateIdx - prev) > 2) {
+    if (prev !== -1 && Math.abs(currentDateIdx - prev) > 8) {
       countriesBufferRef.current = [];
     }
     prevDateIdxRef.current = currentDateIdx;
@@ -122,7 +144,8 @@ export default function Page() {
       .then((r) => r.json())
       .then((data: { countries: SentimentRow[] }) => {
         const buf = [...countriesBufferRef.current, data.countries];
-        if (buf.length > SMOOTH_WINDOW) buf.shift();
+        const win = smoothWindowFor(speedRef.current);
+        if (buf.length > win) buf.splice(0, buf.length - win);
         countriesBufferRef.current = buf;
         setCountries(computeRollingAvg(buf));
       })
@@ -137,14 +160,15 @@ export default function Page() {
       }
       return;
     }
+    const step = speed >= 5 ? 3 : speed >= 2 ? 2 : 1; // advance more days at higher speeds
     playIntervalRef.current = setInterval(() => {
       setCurrentDateIdx((prev) => {
         if (prev >= datesRef.current.length - 1) { setIsPlaying(false); return prev; }
-        return prev + 1;
+        return Math.min(datesRef.current.length - 1, prev + step);
       });
-    }, 200);
+    }, 200 / speed);
     return () => { if (playIntervalRef.current) clearInterval(playIntervalRef.current); };
-  }, [isPlaying, dates.length]);
+  }, [isPlaying, dates.length, speed]);
 
   useEffect(() => {
     const scroll = mainRef.current;
@@ -169,6 +193,7 @@ export default function Page() {
       if (st < vh * 0.5 || st >= vh * 2.9) {
         bar.style.opacity = '0';
         bar.style.pointerEvents = 'none';
+        if (mapHudRef.current) mapHudRef.current.style.opacity = '0';
         return;
       }
 
@@ -183,6 +208,12 @@ export default function Page() {
       bar.style.pointerEvents = 'auto';
 
       const wantScrubber = tlProgress < 0.8;
+      // The map HUD (avg tone + legend) only makes sense while the map is in view.
+      if (mapHudRef.current) {
+        mapHudRef.current.style.opacity = wantScrubber
+          ? String(Math.max(0, Math.min(1, tlOpacity)))
+          : '0';
+      }
       if (showScrubberRef.current !== wantScrubber) {
         showScrubberRef.current = wantScrubber;
         setShowScrubber(wantScrubber);
@@ -202,6 +233,8 @@ export default function Page() {
   }, []);
 
   const handlePlay = useCallback(() => setIsPlaying((p) => !p), []);
+
+  const handleSpeedChange = useCallback((s: number) => { speedRef.current = s; setSpeed(s); }, []);
 
   const handleDateChange = useCallback((idx: number) => {
     setCurrentDateIdx(idx);
@@ -230,6 +263,55 @@ export default function Page() {
         className="fixed inset-0 z-[2] pointer-events-none"
         style={{ opacity: 0.75, background: '#00021a' }}
       />
+
+      {/* Map HUD: global average tone + color legend (only visible over the map) */}
+      <div
+        ref={mapHudRef}
+        className="fixed inset-x-0 top-0 z-[40] px-8 pt-6 flex items-start justify-between opacity-0 pointer-events-none"
+        style={{ transition: 'opacity 150ms ease' }}
+      >
+        {/* Average sentiment box, painted in its sentiment color */}
+        <div
+          className="rounded-xl px-5 py-3 shadow-2xl"
+          style={{
+            background: sentimentColor(avgTone, avgTone === null ? 0 : 1),
+            border: '1px solid rgba(118,131,166,0.25)',
+          }}
+        >
+          <div className="text-[11px] uppercase tracking-wide" style={{ color: 'rgba(236,242,255,0.7)' }}>
+            Global average tone
+          </div>
+          <div className="text-3xl font-bold leading-tight" style={{ color: '#ecf2ff' }}>
+            {avgTone === null ? '—' : `${avgTone >= 0 ? '+' : ''}${avgTone.toFixed(2)}`}
+          </div>
+          <div className="text-[11px]" style={{ color: 'rgba(236,242,255,0.6)' }}>
+            {currentDate || '—'}
+          </div>
+        </div>
+
+        {/* Color legend */}
+        <div
+          className="rounded-xl px-4 py-3 shadow-2xl"
+          style={{ background: 'rgba(0,2,26,0.82)', border: '1px solid rgba(118,131,166,0.25)' }}
+        >
+          <div className="text-[11px] uppercase tracking-wide mb-2" style={{ color: '#7683a6' }}>
+            Sentiment
+          </div>
+          <div
+            className="h-2 w-44 rounded-full"
+            style={{
+              background: `linear-gradient(to right, ${sentimentColor(-5, 1)}, ${NO_COVERAGE}, ${sentimentColor(6, 1)})`,
+            }}
+          />
+          <div className="flex justify-between text-[10px] mt-1" style={{ color: '#7683a6' }}>
+            <span>negative</span><span>0</span><span>positive</span>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: NO_COVERAGE, border: '1px solid rgba(118,131,166,0.3)' }} />
+            <span className="text-[10px]" style={{ color: '#7683a6' }}>no coverage</span>
+          </div>
+        </div>
+      </div>
       <main
         ref={mainRef}
         className="relative z-[3] h-screen overflow-y-scroll snap-y snap-mandatory bg-transparent"
@@ -261,7 +343,9 @@ export default function Page() {
           eraIndices={eraIndices}
           currentDateIdx={currentDateIdx}
           showScrubber={showScrubber}
+          speed={speed}
           onPlay={handlePlay}
+          onSpeedChange={handleSpeedChange}
           onDateChange={handleDateChange}
           onEventClick={handleEventChange}
         />

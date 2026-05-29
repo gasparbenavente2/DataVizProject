@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useCountryNames } from '@/lib/useCountryNames';
 
 interface OpinionChanger {
   iso: string;
@@ -75,6 +76,7 @@ const ARTICLES = [
 export default function SectionSummary() {
   const [selected, setSelected] = useState(0);
   const [summary, setSummary] = useState<SummaryData | null>(null);
+  const names = useCountryNames();
 
   useEffect(() => {
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -145,87 +147,102 @@ export default function SectionSummary() {
             </p>
 
             {activeCard.detail === 'changers' && summary ? (
-              <div className="flex-1 flex gap-8 min-h-0 overflow-auto">
-                {/* Worsened */}
-                <div className="flex-1">
-                  <p className="text-xs font-medium mb-3" style={{ color: '#ef4444' }}>Most worsened (2015–2020 → 2021–2026)</p>
-                  <div className="flex flex-col gap-2">
-                    {summary.opinion_changers.filter(c => c.direction === 'worsened').slice(0, 8).map((c) => (
-                      <div key={c.iso} className="flex items-center justify-between">
-                        <span className="text-sm" style={{ color: '#ecf2ff' }}>{c.iso}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.early >= 0 ? '+' : ''}{c.early.toFixed(1)}</span>
-                          <span className="text-xs" style={{ color: '#7683a6' }}>→</span>
-                          <span className="text-xs tabular-nums" style={{ color: '#ef4444' }}>{c.late.toFixed(1)}</span>
-                          <span className="text-xs font-medium tabular-nums w-12 text-right" style={{ color: '#ef4444' }}>{c.delta.toFixed(1)}</span>
+              <div className="flex-1 flex flex-col min-h-0">
+                <p className="text-xs mb-4 leading-relaxed" style={{ color: '#7683a6' }}>
+                  Change in average tone from 2015–2020 to 2021–2026. Coverage trended negative
+                  overall, so the “improved” column is really <span style={{ color: '#ecf2ff' }}>least worsened</span> —
+                  few countries actually grew more positive.
+                </p>
+                <div className="flex-1 flex gap-8 min-h-0 overflow-auto">
+                  {/* Worsened */}
+                  <div className="flex-1">
+                    <p className="text-xs font-medium mb-3" style={{ color: '#ef4444' }}>Largest drop in tone</p>
+                    <div className="flex flex-col gap-2">
+                      {summary.opinion_changers.filter(c => c.direction === 'worsened').slice(0, 8).map((c) => (
+                        <div key={c.iso} className="flex items-center justify-between gap-2">
+                          <span className="text-sm truncate" style={{ color: '#ecf2ff' }} title={names[c.iso] ?? c.iso}>{names[c.iso] ?? c.iso}</span>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.early >= 0 ? '+' : ''}{c.early.toFixed(1)}</span>
+                            <span className="text-xs" style={{ color: '#7683a6' }}>→</span>
+                            <span className="text-xs tabular-nums" style={{ color: '#ef4444' }}>{c.late.toFixed(1)}</span>
+                            <span className="text-xs font-medium tabular-nums w-12 text-right" style={{ color: '#ef4444' }}>{c.delta.toFixed(1)}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-                {/* Improved */}
-                <div className="flex-1">
-                  <p className="text-xs font-medium mb-3" style={{ color: '#22c55e' }}>Most improved</p>
-                  <div className="flex flex-col gap-2">
-                    {summary.opinion_changers.filter(c => c.direction === 'improved').slice(0, 8).map((c) => (
-                      <div key={c.iso} className="flex items-center justify-between">
-                        <span className="text-sm" style={{ color: '#ecf2ff' }}>{c.iso}</span>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.early.toFixed(1)}</span>
-                          <span className="text-xs" style={{ color: '#7683a6' }}>→</span>
-                          <span className="text-xs tabular-nums" style={{ color: c.delta > 0 ? '#22c55e' : '#ef4444' }}>{c.late.toFixed(1)}</span>
-                          <span className="text-xs font-medium tabular-nums w-12 text-right" style={{ color: c.delta > 0 ? '#22c55e' : '#ef4444' }}>{c.delta > 0 ? '+' : ''}{c.delta.toFixed(1)}</span>
+                  {/* Improved / least worsened */}
+                  <div className="flex-1">
+                    <p className="text-xs font-medium mb-3" style={{ color: '#22c55e' }}>Smallest drop / improved</p>
+                    <div className="flex flex-col gap-2">
+                      {summary.opinion_changers.filter(c => c.direction === 'improved').slice(0, 8).map((c) => (
+                        <div key={c.iso} className="flex items-center justify-between gap-2">
+                          <span className="text-sm truncate" style={{ color: '#ecf2ff' }} title={names[c.iso] ?? c.iso}>{names[c.iso] ?? c.iso}</span>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.early.toFixed(1)}</span>
+                            <span className="text-xs" style={{ color: '#7683a6' }}>→</span>
+                            <span className="text-xs tabular-nums" style={{ color: c.delta > 0 ? '#22c55e' : '#ef4444' }}>{c.late.toFixed(1)}</span>
+                            <span className="text-xs font-medium tabular-nums w-12 text-right" style={{ color: c.delta > 0 ? '#22c55e' : '#ef4444' }}>{c.delta > 0 ? '+' : ''}{c.delta.toFixed(1)}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             ) : activeCard.detail === 'posneg' && summary ? (
-              <div className="flex-1 flex gap-8 min-h-0 overflow-auto">
-                {/* Most positive */}
-                <div className="flex-1">
-                  <p className="text-xs font-medium mb-3" style={{ color: '#22c55e' }}>Most positive countries</p>
-                  <div className="flex flex-col gap-2">
-                    {summary.pos_neg.most_positive.map((c, i) => (
-                      <div key={c.iso} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs w-4 text-right" style={{ color: '#7683a6' }}>{i + 1}</span>
-                          <span className="text-sm" style={{ color: '#ecf2ff' }}>{c.iso}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="h-1 rounded-full" style={{ width: `${Math.max(8, Math.abs(c.tone) * 40)}px`, background: c.tone >= 0 ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.4)' }} />
-                          <span className="text-sm font-medium tabular-nums w-12 text-right" style={{ color: c.tone >= 0 ? '#22c55e' : '#ef4444' }}>
-                            {c.tone >= 0 ? '+' : ''}{c.tone.toFixed(2)}
-                          </span>
-                          <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.articles.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    ))}
+              (() => {
+                // Shared bar scale across both columns so lengths are comparable.
+                const allTones = [...summary.pos_neg.most_positive, ...summary.pos_neg.most_negative].map((c) => Math.abs(c.tone));
+                const maxMag = Math.max(0.5, ...allTones);
+                const barW = (tone: number) => `${Math.max(6, (Math.abs(tone) / maxMag) * 70)}px`;
+                const Header = () => (
+                  <div className="flex items-center gap-2 mb-2 text-[10px] uppercase tracking-wide" style={{ color: 'rgba(118,131,166,0.7)' }}>
+                    <span className="w-4 text-right">#</span>
+                    <span className="flex-1">Country</span>
+                    <span className="w-[70px]" />
+                    <span className="w-14 text-right">Tone</span>
+                    <span className="w-14 text-right">Articles</span>
                   </div>
-                </div>
-                {/* Most negative */}
-                <div className="flex-1">
-                  <p className="text-xs font-medium mb-3" style={{ color: '#ef4444' }}>Most negative countries</p>
-                  <div className="flex flex-col gap-2">
-                    {summary.pos_neg.most_negative.map((c, i) => (
-                      <div key={c.iso} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs w-4 text-right" style={{ color: '#7683a6' }}>{i + 1}</span>
-                          <span className="text-sm" style={{ color: '#ecf2ff' }}>{c.iso}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="h-1 rounded-full" style={{ width: `${Math.max(8, Math.abs(c.tone) * 20)}px`, background: 'rgba(239,68,68,0.6)' }} />
-                          <span className="text-sm font-medium tabular-nums w-12 text-right" style={{ color: '#ef4444' }}>
-                            {c.tone.toFixed(2)}
-                          </span>
-                          <span className="text-xs tabular-nums" style={{ color: '#7683a6' }}>{c.articles.toLocaleString()}</span>
-                        </div>
-                      </div>
-                    ))}
+                );
+                const Row = ({ c, i, color }: { c: PosNegCountry; i: number; color: string }) => (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs w-4 text-right" style={{ color: '#7683a6' }}>{i + 1}</span>
+                    <span className="text-sm truncate flex-1" style={{ color: '#ecf2ff' }} title={names[c.iso] ?? c.iso}>{names[c.iso] ?? c.iso}</span>
+                    <div className="w-[70px] flex justify-end shrink-0">
+                      <div className="h-1.5 rounded-full" style={{ width: barW(c.tone), background: color }} />
+                    </div>
+                    <span className="text-sm font-medium tabular-nums w-14 text-right" style={{ color }}>
+                      {c.tone >= 0 ? '+' : ''}{c.tone.toFixed(2)}
+                    </span>
+                    <span className="text-xs tabular-nums w-14 text-right" style={{ color: '#7683a6' }}>{c.articles.toLocaleString()}</span>
                   </div>
-                </div>
-              </div>
+                );
+                return (
+                  <div className="flex-1 flex gap-8 min-h-0 overflow-auto">
+                    {/* Most positive */}
+                    <div className="flex-1">
+                      <p className="text-xs font-medium mb-3" style={{ color: '#22c55e' }}>Most positive countries</p>
+                      <Header />
+                      <div className="flex flex-col gap-2">
+                        {summary.pos_neg.most_positive.map((c, i) => (
+                          <Row key={c.iso} c={c} i={i} color={c.tone >= 0 ? '#22c55e' : '#ef4444'} />
+                        ))}
+                      </div>
+                    </div>
+                    {/* Most negative */}
+                    <div className="flex-1">
+                      <p className="text-xs font-medium mb-3" style={{ color: '#ef4444' }}>Most negative countries</p>
+                      <Header />
+                      <div className="flex flex-col gap-2">
+                        {summary.pos_neg.most_negative.map((c, i) => (
+                          <Row key={c.iso} c={c} i={i} color="#ef4444" />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()
             ) : activeCard.detail === 'articles' ? (
               <div className="flex flex-col gap-6">
                 {ARTICLES.map((a, i) => (

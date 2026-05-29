@@ -10,6 +10,7 @@ import type {
 } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { SentimentRow } from '@/types';
+import { sentimentColor } from '@/lib/sentimentColor';
 
 export type AnalysisMode = 'sentiment' | 'amount';
 
@@ -25,29 +26,6 @@ const LIGHT_STYLE = {
     },
   ],
 };
-
-const COLOR_FLOOR = 0.25; // minimum color intensity for countries with any coverage
-
-// Sentiment: dark navy (no data) → red (negative) or green (positive)
-function sentimentColor(tone: number | null, count: number): string {
-  if (count === 0 || tone === null) return '#0d1b2e'; // dark navy — no coverage
-  const t = Math.max(-10, Math.min(10, tone));
-  if (t < 0) {
-    const ratio = Math.max(COLOR_FLOOR, Math.min(1, -t / 6));
-    // dark navy → crimson
-    const r = Math.round(13 + ratio * (220 - 13));
-    const g = Math.round(27 + ratio * (38 - 27));
-    const b = Math.round(46 + ratio * (38 - 46));
-    return `rgb(${r},${g},${b})`;
-  } else {
-    const ratio = Math.max(COLOR_FLOOR, Math.min(1, t / 6));
-    // dark navy → green
-    const r = Math.round(13 + ratio * (34 - 13));
-    const g = Math.round(27 + ratio * (197 - 27));
-    const b = Math.round(46 + ratio * (94 - 46));
-    return `rgb(${r},${g},${b})`;
-  }
-}
 
 // Amount: dark navy (0) → muted blue (max)
 function amountColor(count: number, maxCount: number): string {
