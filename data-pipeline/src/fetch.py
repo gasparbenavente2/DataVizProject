@@ -7,12 +7,14 @@ from google.cloud import bigquery
 from google.oauth2 import service_account
 
 _CACHE_DIR = Path(__file__).parents[1] / "output" / "cache"
+# Bump when the SELECT columns change so stale caches (missing new columns) are ignored.
+_CACHE_VERSION = "v3"
 
 
 def _cache_path(topic: str, keywords: list[str], date_start: str, date_end: str) -> Path:
     slug = re.sub(r"[^a-z0-9]+", "-", topic.lower()).strip("-")
     kw_slug = "-".join(sorted(kw.lower() for kw in keywords))[:60]
-    return _CACHE_DIR / f"{slug}__{kw_slug}__{date_start}__{date_end}.parquet"
+    return _CACHE_DIR / f"{slug}__{kw_slug}__{date_start}__{date_end}__{_CACHE_VERSION}.parquet"
 
 
 def fetch(
@@ -54,7 +56,9 @@ def fetch(
         DATE,
         SourceCommonName,
         DocumentIdentifier,
-        V2Tone
+        V2Tone,
+        V2Organizations,
+        V2Themes
     FROM `gdelt-bq.gdeltv2.gkg_partitioned`
     WHERE
         _PARTITIONDATE BETWEEN DATE '{start}' AND DATE '{end}'

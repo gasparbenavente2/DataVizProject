@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from src.config import GCP_PROJECT_ID, OUTPUT_DIR
 from src.fetch import fetch
 from src.transform import transform
-from src.export import export
+from src.topics import aggregate_topics
+from src.export import export, export_topics
 
 
 def main():
@@ -43,7 +44,12 @@ def main():
     agg  = transform(raw)
     path = export(agg, args.topic, args.start, args.end, OUTPUT_DIR)
 
-    print(f"\nDone. Output: {path}")
+    topics = aggregate_topics(raw, keywords)
+    topics_path = export_topics(topics, args.topic, OUTPUT_DIR)
+
+    print(f"\nDone.")
+    print(f"  Sentiment: {path}")
+    print(f"  Topics:    {topics_path}")
 
 
 if __name__ == "__main__":
